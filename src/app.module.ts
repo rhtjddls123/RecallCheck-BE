@@ -4,6 +4,8 @@ import { AppService } from './app.service';
 import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { RecallModule } from './recall/recall.module';
+import { Consumer24Module } from './consumer24/consumer24.module';
 
 @Module({
   imports: [
@@ -17,6 +19,8 @@ import { TypeOrmModule } from '@nestjs/typeorm';
       autoLoadEntities: true,
       synchronize: true, // 개발환경에서만 true 배포시 false,
     }),
+    RecallModule,
+    Consumer24Module,
   ],
   controllers: [AppController],
   providers: [AppService],
