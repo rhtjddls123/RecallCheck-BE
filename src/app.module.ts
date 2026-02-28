@@ -6,6 +6,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { RecallModule } from './recall/recall.module';
 import { Consumer24Module } from './consumer24/consumer24.module';
+import { SafetyInfoModule } from './safety-info/safety-info.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { Consumer24Module } from './consumer24/consumer24.module';
     }),
     RecallModule,
     Consumer24Module,
+    SafetyInfoModule,
   ],
   controllers: [AppController],
   providers: [AppService],
