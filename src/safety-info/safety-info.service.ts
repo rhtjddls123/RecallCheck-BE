@@ -11,7 +11,7 @@ export class SafetyInfoService {
     private readonly safetyInfoRepository: Repository<SafetyInfoModel>,
   ) {}
 
-  async getSafetyInfo(take = 5) {
+  async findRecentSafetyInfo(take = 5) {
     return this.safetyInfoRepository.find({
       order: { updateDate: 'DESC', id: 'ASC' },
       take,

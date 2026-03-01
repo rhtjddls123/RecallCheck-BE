@@ -1,4 +1,10 @@
-import { Controller, Get, Query } from '@nestjs/common';
+import {
+  Controller,
+  DefaultValuePipe,
+  Get,
+  ParseIntPipe,
+  Query,
+} from '@nestjs/common';
 import { SafetyInfoService } from './safety-info.service';
 import { PaginateSafetyInfoDto } from './dto/paginate-safety-info.dto';
 
@@ -6,9 +12,11 @@ import { PaginateSafetyInfoDto } from './dto/paginate-safety-info.dto';
 export class SafetyInfoController {
   constructor(private readonly safetyInfoService: SafetyInfoService) {}
 
-  @Get('top5')
-  async getSafetyInfoByTop5() {
-    return this.safetyInfoService.getSafetyInfo();
+  @Get('recent')
+  async getRecentSafetyInfo(
+    @Query('take', new DefaultValuePipe(5), ParseIntPipe) take: number,
+  ) {
+    return this.safetyInfoService.findRecentSafetyInfo(take);
   }
 
   @Get()
