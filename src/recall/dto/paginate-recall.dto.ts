@@ -1,4 +1,5 @@
 import { IsIn, IsNumber, IsOptional, IsString } from 'class-validator';
+import { RECALL_CATEGORY_KEY_MAP } from 'src/consumer24/const/KEYS.const';
 
 export class PaginateRecallDto {
   @IsOptional()
@@ -12,6 +13,7 @@ export class PaginateRecallDto {
 
   @IsOptional()
   @IsString()
+  @IsIn(Object.keys(RECALL_CATEGORY_KEY_MAP))
   category?: string;
 
   @IsOptional()
