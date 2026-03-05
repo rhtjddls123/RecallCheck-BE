@@ -38,11 +38,6 @@ export class RecallController {
     return this.recallService.findRecentRecall(5);
   }
 
-  @Get('correct-typo')
-  async getCorrectTypo(@Query('query') query: string) {
-    return this.recallService.correctQuery(query);
-  }
-
   @Get('chatbot-search')
   async chatbotSearch(
     @Query('query') query: string,

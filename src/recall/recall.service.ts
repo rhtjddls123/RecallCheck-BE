@@ -13,9 +13,9 @@ import {
   Repository,
 } from 'typeorm';
 import { PaginateRecallDto } from './dto/paginate-recall.dto';
-import { OpenAIService } from './openai.service';
 import { ElasticsearchService } from '@nestjs/elasticsearch';
 import { RECALL_CATEGORY_KEY_TYPE } from 'src/consumer24/const/KEYS.const';
+import { OpenAIService } from 'src/openai/openai.service';
 
 interface RecallEsDocument {
   recallSn: string;
@@ -36,12 +36,23 @@ export class RecallService {
   ) {}
 
   async chatbotSearch(query: string, categoryId?: RECALL_CATEGORY_KEY_TYPE) {
-    // 1단계: exact 매칭, 카테고리 포함
-    const exactResult = await this.exactSearch(query, categoryId);
-    if (exactResult) {
-      return { found: true, differentCategory: false, data: exactResult };
+    // 카테고리id가 없을 경우 전체 카테고리에서 검색
+    if (!categoryId) {
+      const exactResultAll = await this.exactSearch(query, null);
+      if (exactResultAll) {
+        return {
+          found: true,
+          differentCategory: false,
+          data: exactResultAll,
+        };
+      }
+    } else {
+      // 1단계: exact 매칭, 카테고리 포함
+      const exactResult = await this.exactSearch(query, categoryId);
+      if (exactResult) {
+        return { found: true, differentCategory: false, data: exactResult };
+      }
     }
-
     // 2단계: exact 매칭, 카테고리 제외
     const exactResultAll = await this.exactSearch(query, null);
     if (exactResultAll) {
@@ -55,16 +66,10 @@ export class RecallService {
     return { found: false, data: { products: [], count: 0 } };
   }
 
-  // OpenAI 오타 보정
-  async correctQuery(query: string) {
-    const response = await this.openAIService.correctTypo(query);
-    return { isSame: query === response, corrected: response };
-  }
-
   // ES exact 매칭 (LIKE 역할)
   private async exactSearch(
     query: string,
-    categoryId?: RECALL_CATEGORY_KEY_TYPE | null,
+    categoryId: RECALL_CATEGORY_KEY_TYPE | null,
   ) {
     const mustConditions: any[] = [];
     if (categoryId) {
@@ -143,7 +148,11 @@ export class RecallService {
       where: { recallSn: In(recallSns) },
     });
 
-    return { products: data, count: countResult.count };
+    const sorted = recallSns
+      .map((sn) => data.find((p) => p.recallSn === sn))
+      .filter((p): p is RecallModel => p !== undefined);
+
+    return { products: sorted, count: countResult.count };
   }
 
   // ES 임베딩 검색
@@ -153,6 +162,7 @@ export class RecallService {
     const result = await this.esService.search<RecallEsDocument>({
       index: 'recall',
       size: 5,
+      min_score: 0.75,
       knn: {
         field: 'embedding',
         query_vector: embedding,
@@ -178,7 +188,11 @@ export class RecallService {
 
     if (data.length === 0) return { found: false, data: [] };
 
-    return { found: true, data };
+    const sorted = recallSns
+      .map((sn) => data.find((p) => p.recallSn === sn))
+      .filter((p): p is RecallModel => p !== undefined);
+
+    return { found: true, data: sorted };
   }
 
   async syncToElasticsearch() {
