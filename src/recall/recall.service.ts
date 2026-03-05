@@ -23,6 +23,12 @@ export class RecallService {
     private esService: ElasticsearchService,
   ) {}
 
+  // OpenAI 오타 보정
+  async correctQuery(query: string) {
+    const response = await this.openAIService.correctTypo(query);
+    return { isSame: query === response, corrected: response };
+  }
+
   async syncToElasticsearch() {
     const products = await this.recallRepository.find();
     const total = products.length;
