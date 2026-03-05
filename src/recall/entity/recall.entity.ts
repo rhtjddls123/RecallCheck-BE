@@ -112,6 +112,16 @@ export class RecallModel {
   @UpdateDateColumn()
   updatedAt: Date;
 
+  @Column({
+    type: 'vector',
+    nullable: true,
+    transformer: {
+      to: (value: number[]) => (value ? `[${value.join(',')}]` : null),
+      from: (value: string) => value,
+    },
+  })
+  embedding: number[] | null;
+
   @ManyToOne(() => RecallMenuModel, (menu) => menu.recalls)
   @JoinColumn({ name: 'cntntsId' })
   menu: RecallMenuModel;
