@@ -1,0 +1,18 @@
+version: '3'
+services:
+  elasticsearch:
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms1g -Xmx1g # 12GB 중 1GB (개발용)
+    ports:
+      - '9200:9200'
+
+  kibana:
+    image: kibana:8.11.0
+    ports:
+      - '5601:5601'
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    depends_on:
+      - elasticsearch

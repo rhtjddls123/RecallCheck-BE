@@ -1,0 +1,17 @@
+version: '3'
+services:
+  elasticsearch:
+    build:
+      context: .
+      dockerfile: elasticsearch.Dockerfile
+    container_name: elasticsearch
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:9200']
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+volumes:
+  es_data:

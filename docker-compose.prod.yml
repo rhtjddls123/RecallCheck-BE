@@ -1,0 +1,28 @@
+version: '3'
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - NODE_ENV=production
+      - ELASTICSEARCH_NODE=http://elasticsearch:9200
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - DATABASE_URL=${DATABASE_URL}
+    ports:
+      - '3000:3000'
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+
+  elasticsearch:
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=true
+      - ELASTIC_PASSWORD=${ELASTIC_PASSWORD}
+      - ES_JAVA_OPTS=-Xms2g -Xmx2g # GCP e2-medium 4GB 중 2GB
+    ports:
+      - '127.0.0.1:9200:9200' # 외부 노출 차단
+
+volumes:
+  es_data:
