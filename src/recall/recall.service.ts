@@ -145,6 +145,41 @@ export class RecallService {
     return { products: data, count: countResult.count };
   }
 
+  // ES 임베딩 검색
+  async embeddingSearch(query: string) {
+    const embedding = await this.openAIService.getEmbedding(query);
+
+    const result = await this.esService.search<RecallEsDocument>({
+      index: 'recall',
+      size: 5,
+      knn: {
+        field: 'embedding',
+        query_vector: embedding,
+        k: 5,
+        num_candidates: 100,
+      },
+    });
+
+    const hits = result.hits.hits;
+    if (!hits.length) return null;
+
+    console.log(`\n[임베딩 검색] query: "${query}" | categoryId: '전체'`);
+    hits.forEach((h, i) => {
+      console.log(
+        `[${i + 1}] ${h._source?.productNm} | score: ${h._score?.toFixed(3)}`,
+      );
+    });
+
+    const recallSns = hits.map((h) => h._source?.recallSn as string);
+    const data = await this.recallRepository.find({
+      where: { recallSn: In(recallSns) },
+    });
+
+    if (data.length === 0) return { found: false, data: [] };
+
+    return { found: true, data };
+  }
+
   async syncToElasticsearch() {
     const products = await this.recallRepository.find();
     const total = products.length;
