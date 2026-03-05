@@ -1,10 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { Consumer24Service } from './consumer24.service';
+import { RecallService } from 'src/recall/recall.service';
 
 @Injectable()
 export class Consumer24Scheduler {
-  constructor(private readonly consumer24Service: Consumer24Service) {}
+  constructor(
+    private readonly consumer24Service: Consumer24Service,
+    private readonly recallService: RecallService,
+  ) {}
 
   @Cron('0 */3 * * *') // 3시간마다
   async handleCron() {
@@ -12,6 +16,9 @@ export class Consumer24Scheduler {
 
     await this.consumer24Service.saveInfoList();
     await this.consumer24Service.saveAllCategoryRecalls('recent');
+
+    await this.recallService.embedAllProducts();
+    await this.recallService.syncNewProductsToEs();
 
     console.log(`[${new Date().toLocaleString('kr')}] 리콜 데이터 동기화 완료`);
   }

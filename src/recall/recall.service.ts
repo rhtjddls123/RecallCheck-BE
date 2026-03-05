@@ -9,6 +9,7 @@ import {
   IsNull,
   LessThanOrEqual,
   MoreThanOrEqual,
+  Not,
   Repository,
 } from 'typeorm';
 import { PaginateRecallDto } from './dto/paginate-recall.dto';
@@ -341,6 +342,44 @@ export class RecallService {
     console.log(
       `임베딩 완료! 총 소요시간: ${Math.floor(totalSec / 60)}분 ${totalSec % 60}초`,
     );
+  }
+
+  async syncNewProductsToEs() {
+    // 임베딩은 있는데 ES에 없는 것만 동기화
+    const products = await this.recallRepository.find({
+      where: { embedding: Not(IsNull()) },
+    });
+
+    let synced = 0;
+
+    for (let i = 0; i < products.length; i += 1) {
+      const product = products[i];
+      // ES에 이미 있는지 확인
+      const exists = await this.esService.exists({
+        index: 'recall',
+        id: product.recallSn,
+      });
+
+      if (exists) continue;
+      console.log(`전체: ${products.length} 현재: ${i}`);
+
+      await this.esService.index({
+        index: 'recall',
+        id: product.recallSn,
+        document: {
+          recallSn: product.recallSn,
+          cntntsId: product.cntntsId,
+          productNm: product.productNm,
+          makr: product.makr,
+          bsnmNm: product.bsnmNm,
+          embedding: product.embedding,
+        },
+      });
+
+      synced++;
+    }
+
+    console.log(`ES 동기화 완료: ${synced}개 추가`);
   }
 
   async findRecentRecall(take = 5) {
