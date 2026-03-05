@@ -5,6 +5,7 @@ import {
   Between,
   FindOptionsOrder,
   FindOptionsWhere,
+  In,
   IsNull,
   LessThanOrEqual,
   MoreThanOrEqual,
@@ -13,6 +14,16 @@ import {
 import { PaginateRecallDto } from './dto/paginate-recall.dto';
 import { OpenAIService } from './openai.service';
 import { ElasticsearchService } from '@nestjs/elasticsearch';
+import { RECALL_CATEGORY_KEY_TYPE } from 'src/consumer24/const/KEYS.const';
+
+interface RecallEsDocument {
+  recallSn: string;
+  cntntsId: string;
+  productNm: string;
+  makr: string | null;
+  bsnmNm: string | null;
+  embedding: number[];
+}
 
 @Injectable()
 export class RecallService {
@@ -23,10 +34,115 @@ export class RecallService {
     private esService: ElasticsearchService,
   ) {}
 
+  async chatbotSearch(query: string, categoryId?: RECALL_CATEGORY_KEY_TYPE) {
+    // 1단계: exact 매칭, 카테고리 포함
+    const exactResult = await this.exactSearch(query, categoryId);
+    if (exactResult) {
+      return { found: true, differentCategory: false, data: exactResult };
+    }
+
+    // 2단계: exact 매칭, 카테고리 제외
+    const exactResultAll = await this.exactSearch(query, null);
+    if (exactResultAll) {
+      return {
+        found: true,
+        differentCategory: true,
+        data: exactResultAll,
+      };
+    }
+
+    return { found: false, data: { products: [], count: 0 } };
+  }
+
   // OpenAI 오타 보정
   async correctQuery(query: string) {
     const response = await this.openAIService.correctTypo(query);
     return { isSame: query === response, corrected: response };
+  }
+
+  // ES exact 매칭 (LIKE 역할)
+  private async exactSearch(
+    query: string,
+    categoryId?: RECALL_CATEGORY_KEY_TYPE | null,
+  ) {
+    const mustConditions: any[] = [];
+    if (categoryId) {
+      mustConditions.push({ term: { cntntsId: categoryId } });
+    }
+
+    const countResult = await this.esService.count({
+      index: 'recall',
+      query: {
+        bool: {
+          must: mustConditions,
+          should: [
+            {
+              match_phrase: {
+                productNm: { query, boost: 3 },
+              },
+            },
+            {
+              match_phrase: {
+                makr: { query, boost: 1 },
+              },
+            },
+            {
+              match_phrase: {
+                bsnmNm: { query, boost: 1 },
+              },
+            },
+          ],
+          minimum_should_match: 1,
+        },
+      },
+    });
+
+    const result = await this.esService.search<RecallEsDocument>({
+      index: 'recall',
+      size: 3,
+      query: {
+        bool: {
+          must: mustConditions,
+          should: [
+            {
+              match_phrase: {
+                productNm: { query, boost: 3 },
+              },
+            },
+            {
+              match_phrase: {
+                makr: { query, boost: 1 },
+              },
+            },
+            {
+              match_phrase: {
+                bsnmNm: { query, boost: 1 },
+              },
+            },
+          ],
+          minimum_should_match: 1,
+        },
+      },
+    });
+
+    const hits = result.hits.hits;
+    if (!hits.length) return null;
+
+    console.log(
+      `\n[Exact 검색] query: "${query}" | categoryId: ${categoryId ?? '전체'}`,
+    );
+    hits.forEach((h, i) => {
+      console.log(
+        `[${i + 1}] ${h._source?.productNm} | score: ${h._score?.toFixed(3)}`,
+      );
+    });
+
+    const recallSns = hits.map((h) => h._source?.recallSn as string);
+    const data = await this.recallRepository.find({
+      where: { recallSn: In(recallSns) },
+    });
+
+    return { products: data, count: countResult.count };
   }
 
   async syncToElasticsearch() {
