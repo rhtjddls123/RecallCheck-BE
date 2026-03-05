@@ -11,5 +11,6 @@ import { EsModule } from './elasticsearch.module';
   imports: [TypeOrmModule.forFeature([RecallModel, RecallMenuModel]), EsModule],
   controllers: [RecallController],
   providers: [RecallService, OpenAIService],
+  exports: [RecallService],
 })
 export class RecallModule {}
