@@ -19,7 +19,7 @@ export class OpenAIService {
     return response.data[0].embedding;
   }
 
-  async correctTypo(query: string): Promise<string> {
+  async correctTypo(query: string) {
     const response = await this.client.chat.completions.create({
       model: 'gpt-4o-mini',
       max_tokens: 50,
@@ -51,7 +51,11 @@ export class OpenAIService {
         },
       ],
     });
+    const corrected = response.choices[0].message.content?.trim() ?? query;
 
-    return response.choices[0].message.content?.trim() ?? query;
+    return {
+      isSame: corrected === query,
+      corrected,
+    };
   }
 }
