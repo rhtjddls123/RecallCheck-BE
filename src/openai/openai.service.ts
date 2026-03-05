@@ -19,6 +19,61 @@ export class OpenAIService {
     return response.data[0].embedding;
   }
 
+  async extractProductInfo(
+    imageBase64: string,
+    mimetype: string,
+  ): Promise<{ query: string | null }> {
+    const response = await this.client.chat.completions.create({
+      model: 'gpt-4o-mini',
+      max_tokens: 100,
+      messages: [
+        {
+          role: 'system',
+          content: `
+          이미지에서 제품명 또는 회사명(제조사) 중 가장 유력한 것 하나만 추출해줘.
+          JSON 형식으로만 반환해줘.
+          찾을 수 없으면 null로 반환해줘.
+          다른 말은 절대 하지마.
+
+          우선순위:
+          1. 제품명이 명확하면 제품명 반환
+          2. 제품명이 불명확하면 회사명 반환
+          3. 둘 다 없으면 null 반환
+
+          반환 형식:
+          {"query": "추출된 단어"}
+        `,
+        },
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'image_url',
+              image_url: {
+                url: `data:${mimetype};base64,${imageBase64}`,
+              },
+            },
+            {
+              type: 'text',
+              text: '이미지에서 제품명 또는 회사명 중 가장 유력한 것 하나만 추출해줘.',
+            },
+          ],
+        },
+      ],
+    });
+
+    const content = response.choices[0].message.content?.trim() ?? '{}';
+
+    try {
+      const parsed = JSON.parse(content) as {
+        query: string | null;
+      };
+      return parsed;
+    } catch {
+      return { query: null };
+    }
+  }
+
   async correctTypo(query: string) {
     const response = await this.client.chat.completions.create({
       model: 'gpt-4o-mini',
