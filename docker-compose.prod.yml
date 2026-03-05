@@ -16,6 +16,19 @@ services:
 
   elasticsearch:
     restart: always
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'curl',
+          '-f',
+          '-u',
+          'elastic:${ELASTIC_PASSWORD}',
+          'http://localhost:9200',
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
     environment:
       - discovery.type=single-node
       - xpack.security.enabled=true

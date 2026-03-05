@@ -3,6 +3,7 @@ import {
   DefaultValuePipe,
   Get,
   ParseIntPipe,
+  Post,
   Query,
 } from '@nestjs/common';
 import { RecallService } from './recall.service';
@@ -32,6 +33,11 @@ export class RecallController {
     return this.recallService.findPaginateRecall(body);
   }
 
+  @Get('search')
+  async getRecallWithChatbot() {
+    return this.recallService.findRecentRecall(5);
+  }
+
   @Get('correct-typo')
   async getCorrectTypo(@Query('query') query: string) {
     return this.recallService.correctQuery(query);
@@ -50,23 +56,23 @@ export class RecallController {
     return this.recallService.embeddingSearch(query);
   }
 
-  // @Get('ping')
-  // async ping() {
-  //   return this.recallService.checkConnection();
-  // }
+  @Get('ping')
+  async ping() {
+    return this.recallService.checkConnection();
+  }
 
-  // @Post('create-index') // es 인덱스 생성
-  // async createIndex() {
-  //   return this.recallService.createIndex();
-  // }
+  @Post('create-index') // es 인덱스 생성
+  async createIndex() {
+    return this.recallService.createIndex();
+  }
 
-  // @Post('sync') // es db와 동기화
-  // async sync() {
-  //   return this.recallService.syncToElasticsearch();
-  // }
+  @Post('sync') // es db와 동기화
+  async sync() {
+    return this.recallService.syncToElasticsearch();
+  }
 
-  // @Post('embed-all') // 최초 1회만 실행(db에 임베딩값 저장)
-  // async embedAll() {
-  //   return this.recallService.embedAllProducts();
-  // }
+  @Post('embed-all') // 최초 1회만 실행(db에 임베딩값 저장)
+  async embedAll() {
+    return this.recallService.embedAllProducts();
+  }
 }
