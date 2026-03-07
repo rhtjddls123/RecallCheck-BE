@@ -28,6 +28,25 @@ export class AuthController {
     return res.json({ success: true });
   }
 
+  @Post('logout')
+  async logout(@Req() req: Request, @Res() res: Response) {
+    const refreshToken = req.cookies['refreshToken'] as string;
+
+    if (refreshToken) {
+      try {
+        const payload = this.authService.verifyToken(refreshToken);
+        await this.authService.logout(payload.sub);
+      } catch {
+        // 토큰 만료돼도 쿠키는 제거
+      }
+    }
+
+    res.clearCookie('accessToken');
+    res.clearCookie('refreshToken');
+
+    return res.json({ success: true });
+  }
+
   @Post('refresh')
   async refresh(@Req() req: Request, @Res() res: Response) {
     const refreshToken = req.cookies['refreshToken'] as string;

@@ -107,6 +107,10 @@ export class AuthService {
     return { accessToken: newAccessToken };
   }
 
+  async logout(userId: number) {
+    await this.userRepository.update(userId, { refreshToken: null });
+  }
+
   signToken(user: Pick<UserModel, 'id' | 'nickname'>, isRefreshToken: boolean) {
     const payload = {
       nickname: user.nickname,
