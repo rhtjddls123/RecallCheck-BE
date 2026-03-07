@@ -8,7 +8,7 @@ async function bootstrap() {
   app.enableCors({
     origin:
       process.env.NODE_ENV === 'production'
-        ? 'https://recall-check-fe.vercel.app'
+        ? 'https://recall-check.site'
         : 'http://localhost:3001',
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
     credentials: true,
