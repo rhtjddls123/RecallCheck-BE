@@ -9,6 +9,7 @@ import {
   JoinColumn,
 } from 'typeorm';
 import { RecallMenuModel } from './recall-menu.entity';
+import { Exclude } from 'class-transformer';
 
 @Entity()
 export class RecallModel {
@@ -112,6 +113,7 @@ export class RecallModel {
   @UpdateDateColumn()
   updatedAt: Date;
 
+  @Exclude()
   @Column({
     type: 'vector',
     nullable: true,

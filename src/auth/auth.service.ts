@@ -2,6 +2,7 @@ import {
   HttpException,
   HttpStatus,
   Injectable,
+  NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
@@ -28,7 +29,7 @@ interface KakaoUserResponse {
   };
 }
 
-interface JwtPayload {
+export interface JwtPayload {
   sub: number;
   nickname: string;
   type: 'refresh' | 'access';
@@ -109,6 +110,27 @@ export class AuthService {
 
   async logout(userId: number) {
     await this.userRepository.update(userId, { refreshToken: null });
+  }
+
+  async deleteUser(userId: number) {
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+
+    if (!user) {
+      throw new NotFoundException('유저가 존재하지 않습니다');
+    }
+
+    await axios.post(
+      'https://kapi.kakao.com/v1/user/unlink',
+      { target_id_type: 'user_id', target_id: user.kakaoId },
+      {
+        headers: {
+          Authorization: `KakaoAK ${process.env.KAKAO_ADMIN_KEY}`,
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+      },
+    );
+
+    await this.userRepository.delete(userId);
   }
 
   signToken(user: Pick<UserModel, 'id' | 'nickname'>, isRefreshToken: boolean) {

@@ -1,3 +1,4 @@
+import { Exclude } from 'class-transformer';
 import { BaseModel } from 'src/common/entity/base.entity';
 import { Entity, Column } from 'typeorm';
 
@@ -12,6 +13,7 @@ export class UserModel extends BaseModel {
   @Column({ type: 'text', nullable: true })
   profileImage: string | null;
 
+  @Exclude()
   @Column({ type: 'text', nullable: true })
   refreshToken: string | null;
 }
