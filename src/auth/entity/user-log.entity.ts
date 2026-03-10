@@ -9,17 +9,20 @@ export class UserLogModel extends BaseModel {
   @Column({ type: 'enum', enum: LogTypeEnum })
   type: LogTypeEnum;
 
-  @Column({ nullable: true })
-  keyword: string;
+  @Column({ type: 'text', nullable: true })
+  keyword: string | null;
 
-  @Column({ nullable: true })
-  contentId: string;
+  @Column({ type: 'text', nullable: true })
+  productNm: string | null;
 
-  @Column({ nullable: true })
-  imageUrl: string;
+  @Column({ type: 'text', nullable: true })
+  makr: string | null;
 
-  @Column({ nullable: true })
-  targetUrl: string;
+  @Column({ type: 'text', nullable: true })
+  imageUrl: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  targetUrl: string | null;
 
   @ManyToOne(() => UserModel, (user) => user.logs, { onDelete: 'CASCADE' })
   user: UserModel;

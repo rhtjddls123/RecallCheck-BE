@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { RecallModel } from './entity/recall.entity';
 import {
@@ -41,29 +41,24 @@ export class RecallService {
   ) {}
 
   async findRecallDetail(recallSn: string, userId?: number) {
+    const item = await this.recallRepository.findOne({ where: { recallSn } });
+
+    if (!item) {
+      throw new NotFoundException('제품을 찾을 수 없습니다.');
+    }
     let user: UserModel | null = null;
 
     if (userId) user = await this.userService.getUserById(userId);
 
     if (user) {
       await this.userService.addUserLog(user, LogTypeEnum.VIEW, {
-        contentId: recallSn,
+        productNm: item.productNm,
+        makr: item.makr || item.bsnmNm,
+        imageUrl: item.recallImgUrls?.[0],
         targetUrl: `${process.env.FRONTEND_URL}/recall/${recallSn}`,
       });
     }
-    return this.recallRepository.findOne({ where: { recallSn } });
-  }
-
-  async saveChatbotLog(userId?: number, path?: string) {
-    let user: UserModel | null = null;
-
-    if (userId) user = await this.userService.getUserById(userId);
-
-    if (user && path) {
-      await this.userService.addUserLog(user, LogTypeEnum.IMG, {
-        imageUrl: path,
-      });
-    }
+    return item;
   }
 
   async chatbotSearchWithLogSave(

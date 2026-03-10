@@ -54,15 +54,6 @@ export class RecallController {
     return this.recallService.findRecentRecall(5);
   }
 
-  @Get(':recallSn')
-  @UseGuards(OptionalJwtGuard)
-  async getRecallDetail(
-    @Param('recallSn') recallSn: string,
-    @GetUser() userId?: JwtPayload['sub'],
-  ) {
-    return this.recallService.findRecallDetail(recallSn, userId);
-  }
-
   @Get('chatbot-search')
   @UseGuards(OptionalJwtGuard)
   async chatbotSearch(
@@ -110,5 +101,14 @@ export class RecallController {
   @Post('embed-all') // 최초 1회만 실행(db에 임베딩값 저장)
   async embedAll() {
     return this.recallService.embedAllProducts();
+  }
+
+  @Get(':recallSn')
+  @UseGuards(OptionalJwtGuard)
+  async getRecallDetail(
+    @Param('recallSn') recallSn: string,
+    @GetUser() userId?: JwtPayload['sub'],
+  ) {
+    return this.recallService.findRecallDetail(recallSn, userId);
   }
 }
