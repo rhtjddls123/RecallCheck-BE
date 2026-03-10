@@ -1,6 +1,7 @@
 import { Exclude } from 'class-transformer';
 import { BaseModel } from 'src/common/entity/base.entity';
-import { Entity, Column } from 'typeorm';
+import { Entity, Column, OneToMany } from 'typeorm';
+import { UserLogModel } from './user-log.entity';
 
 @Entity()
 export class UserModel extends BaseModel {
@@ -16,4 +17,7 @@ export class UserModel extends BaseModel {
   @Exclude()
   @Column({ type: 'text', nullable: true })
   refreshToken: string | null;
+
+  @OneToMany(() => UserLogModel, (logs) => logs.user)
+  logs: UserLogModel[];
 }
