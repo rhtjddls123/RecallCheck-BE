@@ -6,6 +6,7 @@ import {
   ParseIntPipe,
   Post,
   Query,
+  UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { RecallService } from './recall.service';
@@ -14,6 +15,10 @@ import type { RECALL_CATEGORY_KEY_TYPE } from 'src/consumer24/const/KEYS.const';
 import { InjectRepository } from '@nestjs/typeorm';
 import { RecallModel } from './entity/recall.entity';
 import { Repository } from 'typeorm';
+import { RolesGuard } from 'src/auth/guard/roles.guard';
+import { JwtGuard } from 'src/auth/guard/jwt.guard';
+import { RolesEnum } from 'src/auth/const/roles.const';
+import { Roles } from 'src/auth/decorator/roles.decorator';
 
 @UseInterceptors(ClassSerializerInterceptor)
 @Controller('recall')
@@ -54,21 +59,29 @@ export class RecallController {
     return this.recallService.embeddingSearch(query);
   }
 
+  @Roles(RolesEnum.ADMIN)
+  @UseGuards(JwtGuard, RolesGuard)
   @Get('ping')
   async ping() {
     return this.recallService.checkConnection();
   }
 
+  @Roles(RolesEnum.ADMIN)
+  @UseGuards(JwtGuard, RolesGuard)
   @Post('create-index') // es 인덱스 생성
   async createIndex() {
     return this.recallService.createIndex();
   }
 
+  @Roles(RolesEnum.ADMIN)
+  @UseGuards(JwtGuard, RolesGuard)
   @Post('sync') // es db와 동기화
   async sync() {
     return this.recallService.syncToElasticsearch();
   }
 
+  @Roles(RolesEnum.ADMIN)
+  @UseGuards(JwtGuard, RolesGuard)
   @Post('embed-all') // 최초 1회만 실행(db에 임베딩값 저장)
   async embedAll() {
     return this.recallService.embedAllProducts();

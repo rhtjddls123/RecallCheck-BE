@@ -10,6 +10,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import axios from 'axios';
 import { UserModel } from './entity/user.entity';
+import { RolesEnum } from './const/roles.const';
 
 interface KakaoTokenResponse {
   access_token: string;
@@ -33,6 +34,7 @@ export interface JwtPayload {
   sub: number;
   nickname: string;
   type: 'refresh' | 'access';
+  role: RolesEnum;
 }
 
 @Injectable()
@@ -133,10 +135,14 @@ export class AuthService {
     await this.userRepository.delete(userId);
   }
 
-  signToken(user: Pick<UserModel, 'id' | 'nickname'>, isRefreshToken: boolean) {
+  signToken(
+    user: Pick<UserModel, 'id' | 'nickname' | 'role'>,
+    isRefreshToken: boolean,
+  ) {
     const payload = {
       nickname: user.nickname,
       sub: user.id,
+      role: user.role,
       type: isRefreshToken ? 'refresh' : 'access',
     };
 
@@ -145,7 +151,7 @@ export class AuthService {
     });
   }
 
-  loginUser(user: Pick<UserModel, 'id' | 'nickname'>) {
+  loginUser(user: Pick<UserModel, 'id' | 'nickname' | 'role'>) {
     return {
       accessToken: this.signToken(user, false),
       refreshToken: this.signToken(user, true),

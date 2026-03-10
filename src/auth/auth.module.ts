@@ -5,6 +5,7 @@ import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { UserModel } from './entity/user.entity';
 import { UserService } from './user.service';
+import { UserLogModel } from './entity/user-log.entity';
 
 @Module({
   imports: [
@@ -14,7 +15,7 @@ import { UserService } from './user.service';
         signOptions: { expiresIn: '7d' },
       }),
     }),
-    TypeOrmModule.forFeature([UserModel]),
+    TypeOrmModule.forFeature([UserModel, UserLogModel]),
   ],
   controllers: [AuthController],
   providers: [AuthService, UserService],
