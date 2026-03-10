@@ -16,6 +16,9 @@ import { PaginateRecallDto } from './dto/paginate-recall.dto';
 import { ElasticsearchService } from '@nestjs/elasticsearch';
 import { RECALL_CATEGORY_KEY_TYPE } from 'src/consumer24/const/KEYS.const';
 import { OpenAIService } from 'src/openai/openai.service';
+import { UserService } from 'src/auth/user.service';
+import { UserModel } from 'src/auth/entity/user.entity';
+import { LogTypeEnum } from 'src/auth/const/log-type.const';
 
 interface RecallEsDocument {
   recallSn: string;
@@ -31,9 +34,42 @@ export class RecallService {
   constructor(
     @InjectRepository(RecallModel)
     private readonly recallRepository: Repository<RecallModel>,
-    private openAIService: OpenAIService,
-    private esService: ElasticsearchService,
+    private readonly openAIService: OpenAIService,
+    private readonly esService: ElasticsearchService,
+    private readonly userService: UserService,
   ) {}
+
+  async saveChatbotLog(userId?: number, path?: string) {
+    let user: UserModel | null = null;
+
+    if (userId) user = await this.userService.getUserById(userId);
+
+    if (user && path) {
+      await this.userService.addUserLog(user, LogTypeEnum.IMG, {
+        imageUrl: path,
+      });
+    }
+  }
+
+  async chatbotSearchWithLogSave(
+    query: string,
+    categoryId?: RECALL_CATEGORY_KEY_TYPE,
+    userId?: number,
+    path?: string,
+  ) {
+    const searchResult = await this.chatbotSearch(query, categoryId);
+
+    if (userId && path) {
+      const user = await this.userService.getUserById(userId);
+      if (user && searchResult.data.targetUrl) {
+        await this.userService.addUserLog(user, LogTypeEnum.IMG, {
+          imageUrl: path,
+          targetUrl: searchResult.data.targetUrl,
+        });
+      }
+    }
+    return searchResult;
+  }
 
   async chatbotSearch(query: string, categoryId?: RECALL_CATEGORY_KEY_TYPE) {
     // 카테고리id가 없을 경우 전체 카테고리에서 검색
@@ -63,7 +99,11 @@ export class RecallService {
       };
     }
 
-    return { found: false, data: { products: [], count: 0 } };
+    return {
+      found: false,
+      data: { products: [], count: 0, targetUrl: null },
+      differentCategory: false,
+    };
   }
 
   // ES exact 매칭 (LIKE 역할)
@@ -152,7 +192,11 @@ export class RecallService {
       .map((sn) => data.find((p) => p.recallSn === sn))
       .filter((p): p is RecallModel => p !== undefined);
 
-    return { products: sorted, count: countResult.count };
+    return {
+      products: sorted,
+      count: countResult.count,
+      targetUrl: countResult.count > 0 ? 'sss' : null,
+    };
   }
 
   // ES 임베딩 검색

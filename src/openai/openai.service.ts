@@ -1,17 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import OpenAI from 'openai';
-import { LogTypeEnum } from 'src/auth/const/log-type.const';
-import { UserService } from 'src/auth/user.service';
 import { CommonService } from 'src/common/common.service';
 
 @Injectable()
 export class OpenAIService {
   private client: OpenAI;
 
-  constructor(
-    private readonly commonService: CommonService,
-    private readonly userService: UserService,
-  ) {
+  constructor(private readonly commonService: CommonService) {
     this.client = new OpenAI({
       apiKey: process.env.OPENAI_API_KEY,
     });
@@ -30,7 +25,7 @@ export class OpenAIService {
     mimetype: string,
     file: Express.Multer.File,
     userId?: number,
-  ): Promise<{ query: string | null }> {
+  ): Promise<{ query: string | null; path: string | null }> {
     const response = await this.client.chat.completions.create({
       model: 'gpt-4o-mini',
       max_tokens: 100,
@@ -77,19 +72,13 @@ export class OpenAIService {
         query: string | null;
       };
 
+      let path: string | null = null;
       if (parsed.query && userId) {
-        const path = await this.commonService.upload(file);
-        const user = await this.userService.getUserById(userId);
-
-        if (user) {
-          await this.userService.addUserLog(user, LogTypeEnum.IMG, {
-            imageUrl: path,
-          });
-        }
+        path = await this.commonService.upload(file);
       }
-      return parsed;
+      return { query: parsed.query, path };
     } catch {
-      return { query: null };
+      return { query: null, path: null };
     }
   }
 

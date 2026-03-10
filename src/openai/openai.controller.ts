@@ -44,6 +44,7 @@ export class OpenaiController {
         found: false,
         message: 'jpeg, png, gif, webp, heic 형식만 지원합니다.',
         query: null,
+        path: null,
       };
     }
 
@@ -56,7 +57,7 @@ export class OpenaiController {
     }
 
     const imageBase64 = buffer.toString('base64');
-    const { query } = await this.openaiService.extractProductInfo(
+    const { query, path } = await this.openaiService.extractProductInfo(
       imageBase64,
       mimetype,
       file,
@@ -68,6 +69,7 @@ export class OpenaiController {
         found: false,
         message: '이미지에서 제품 정보를 찾을 수 없습니다.',
         query: null,
+        path: null,
       };
     }
 
@@ -75,6 +77,7 @@ export class OpenaiController {
       found: true,
       message: '이미지에서 제품 정보를 불러왔습니다.',
       query,
+      path,
     };
   }
 }

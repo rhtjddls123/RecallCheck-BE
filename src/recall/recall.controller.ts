@@ -19,6 +19,9 @@ import { RolesGuard } from 'src/auth/guard/roles.guard';
 import { JwtGuard } from 'src/auth/guard/jwt.guard';
 import { RolesEnum } from 'src/auth/const/roles.const';
 import { Roles } from 'src/auth/decorator/roles.decorator';
+import { OptionalJwtGuard } from 'src/auth/guard/optional-jwt.guard';
+import { JwtPayload } from 'src/auth/auth.service';
+import { GetUser } from 'src/auth/decorator/get-userId.decorator';
 
 @UseInterceptors(ClassSerializerInterceptor)
 @Controller('recall')
@@ -47,11 +50,19 @@ export class RecallController {
   }
 
   @Get('chatbot-search')
+  @UseGuards(OptionalJwtGuard)
   async chatbotSearch(
     @Query('query') query: string,
     @Query('categoryId') categoryId?: RECALL_CATEGORY_KEY_TYPE,
+    @Query('path') path?: string,
+    @GetUser() userId?: JwtPayload['sub'],
   ) {
-    return this.recallService.chatbotSearch(query, categoryId);
+    return this.recallService.chatbotSearchWithLogSave(
+      query,
+      categoryId,
+      userId,
+      path,
+    );
   }
 
   @Get('embedding-search')
