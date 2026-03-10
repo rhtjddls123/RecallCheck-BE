@@ -3,6 +3,10 @@ import { RECALL_CATEGORY_KEY_MAP } from 'src/consumer24/const/KEYS.const';
 
 export class PaginateRecallDto {
   @IsOptional()
+  @IsString()
+  query?: string;
+
+  @IsOptional()
   @IsNumber()
   page?: number;
 

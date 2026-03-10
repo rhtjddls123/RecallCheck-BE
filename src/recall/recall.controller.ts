@@ -41,8 +41,12 @@ export class RecallController {
   }
 
   @Get()
-  async getRecall(@Query() body: PaginateRecallDto) {
-    return this.recallService.findPaginateRecall(body);
+  @UseGuards(OptionalJwtGuard)
+  async getRecall(
+    @Query() body: PaginateRecallDto,
+    @GetUser() userId?: JwtPayload['sub'],
+  ) {
+    return this.recallService.findPaginateRecall(body, userId);
   }
 
   @Get('search')

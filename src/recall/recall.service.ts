@@ -19,6 +19,7 @@ import { OpenAIService } from 'src/openai/openai.service';
 import { UserService } from 'src/auth/user.service';
 import { UserModel } from 'src/auth/entity/user.entity';
 import { LogTypeEnum } from 'src/auth/const/log-type.const';
+import { estypes } from '@elastic/elasticsearch';
 
 interface RecallEsDocument {
   recallSn: string;
@@ -461,7 +462,7 @@ export class RecallService {
     });
   }
 
-  async findPaginateRecall(dto: PaginateRecallDto) {
+  async findPaginateRecall(dto: PaginateRecallDto, userId?: number) {
     const currentPage = dto.page ?? 1;
 
     const orderMap: Record<string, FindOptionsOrder<RecallModel>> = {
@@ -476,8 +477,61 @@ export class RecallService {
       return `20${year}-${month}-${day}`;
     };
 
+    let recallSns: string[] | null = null;
+    if (dto.query) {
+      const mustConditions: estypes.QueryDslQueryContainer[] = [];
+      if (dto.category) {
+        mustConditions.push({ term: { cntntsId: dto.category } });
+      }
+
+      const query = dto.query;
+
+      let user: UserModel | null = null;
+      if (userId) user = await this.userService.getUserById(userId);
+      if (user)
+        await this.userService.addUserLog(user, LogTypeEnum.SEARCH, {
+          keyword: query,
+          targetUrl: `${process.env.FRONTEND_URL}${this.buildTargetUrl(dto)}`,
+        });
+
+      const searchResult = await this.esService.search<RecallEsDocument>({
+        index: 'recall',
+        size: 10000,
+        query: {
+          bool: {
+            must: mustConditions,
+            should: [
+              { match_phrase: { productNm: { query } } },
+              { match_phrase: { makr: { query } } },
+              { match_phrase: { bsnmNm: { query } } },
+            ],
+            minimum_should_match: 1,
+          },
+        },
+      });
+
+      recallSns = searchResult.hits.hits.map(
+        (h) => h._source?.recallSn as string,
+      );
+
+      if (!recallSns.length) {
+        return {
+          data: [],
+          total: 0,
+          page: currentPage,
+          take: dto.take,
+          totalPages: 0,
+          hasNext: false,
+          hasPrev: false,
+        };
+      }
+    }
+
     const buildWhere = (): FindOptionsWhere<RecallModel>[] => {
-      const base = { cntntsId: dto.category };
+      const base = {
+        cntntsId: dto.category,
+        ...(recallSns && { recallSn: In(recallSns) }),
+      };
 
       if (dto.startDate && dto.endDate) {
         return [
@@ -493,7 +547,7 @@ export class RecallService {
             recallPublictBgnde: IsNull(),
             recallPublictEndde: MoreThanOrEqual(parseDate(dto.startDate)),
           },
-        ] as FindOptionsWhere<RecallModel>[];
+        ];
       } else if (dto.startDate) {
         return [
           {
@@ -523,11 +577,13 @@ export class RecallService {
       return [base];
     };
 
+    const order = orderMap[dto.order] ?? { recallSn: 'DESC' };
+
     const [data, total] = await this.recallRepository.findAndCount({
       where: buildWhere(),
       skip: dto.take * (currentPage - 1),
       take: dto.take,
-      order: orderMap[dto.order],
+      order,
     });
 
     return {
@@ -539,5 +595,18 @@ export class RecallService {
       hasNext: currentPage * dto.take < total,
       hasPrev: currentPage > 1,
     };
+  }
+
+  private buildTargetUrl(dto: PaginateRecallDto): string {
+    const params = new URLSearchParams();
+
+    if (dto.query) params.set('query', dto.query);
+    if (dto.category) params.set('category', dto.category);
+    if (dto.startDate) params.set('startDate', dto.startDate);
+    if (dto.endDate) params.set('endDate', dto.endDate);
+    if (dto.order) params.set('order', dto.order);
+    if (dto.page) params.set('page', dto.page.toString());
+
+    return `/recall?${params.toString()}`;
   }
 }
