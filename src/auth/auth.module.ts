@@ -19,6 +19,6 @@ import { UserLogModel } from './entity/user-log.entity';
   ],
   controllers: [AuthController],
   providers: [AuthService, UserService],
-  exports: [AuthService],
+  exports: [AuthService, UserService],
 })
 export class AuthModule {}
