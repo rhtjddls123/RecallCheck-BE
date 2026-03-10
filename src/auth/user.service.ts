@@ -1,6 +1,6 @@
 import { InjectRepository } from '@nestjs/typeorm';
 import { UserModel } from './entity/user.entity';
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { FindOptionsWhere, LessThan, Repository } from 'typeorm';
 import { LogTypeEnum } from './const/log-type.const';
 import { UserLogModel } from './entity/user-log.entity';
@@ -25,6 +25,22 @@ export class UserService {
     data?: Partial<UserLogModel>,
   ) {
     await this.userLogRepository.save({ user, type, ...data });
+  }
+
+  async deleteUserLog(logId: number) {
+    const log = await this.userLogRepository.findOne({ where: { id: logId } });
+
+    if (!log) {
+      throw new NotFoundException('로그를 찾을 수 없습니다.');
+    }
+    return await this.userLogRepository.remove(log);
+  }
+
+  async isLogMine(userId: number, logId: number) {
+    return this.userLogRepository.exists({
+      where: { id: logId, user: { id: userId } },
+      relations: { user: true },
+    });
   }
 
   async cursorPaginateActivity(dto: ActivityPaginateDto, userId: number) {

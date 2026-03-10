@@ -10,6 +10,8 @@ import {
   ClassSerializerInterceptor,
   Delete,
   Query,
+  Param,
+  ParseIntPipe,
 } from '@nestjs/common';
 import type { Response, Request } from 'express';
 import { AuthService } from './auth.service';
@@ -17,6 +19,7 @@ import { JwtGuard } from './guard/jwt.guard';
 import { UserService } from './user.service';
 import { User } from './decorator/user.decorator';
 import { ActivityPaginateDto } from './dto/activity-paginate.dto';
+import { IsLogMineOrAdminGuard } from './guard/is-log-mine-or-admin.guard';
 
 @Controller('auth')
 export class AuthController {
@@ -114,5 +117,11 @@ export class AuthController {
     @User('sub') userId: number,
   ) {
     return await this.userService.cursorPaginateActivity(body, userId);
+  }
+
+  @UseGuards(JwtGuard, IsLogMineOrAdminGuard)
+  @Delete('activity/:logId')
+  async deleteActivity(@Param('logId', ParseIntPipe) logId: number) {
+    return await this.userService.deleteUserLog(logId);
   }
 }
