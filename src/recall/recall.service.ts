@@ -39,6 +39,20 @@ export class RecallService {
     private readonly userService: UserService,
   ) {}
 
+  async findRecallDetail(recallSn: string, userId?: number) {
+    let user: UserModel | null = null;
+
+    if (userId) user = await this.userService.getUserById(userId);
+
+    if (user) {
+      await this.userService.addUserLog(user, LogTypeEnum.VIEW, {
+        contentId: recallSn,
+        targetUrl: `${process.env.FRONTEND_URL}/recall/${recallSn}`,
+      });
+    }
+    return this.recallRepository.findOne({ where: { recallSn } });
+  }
+
   async saveChatbotLog(userId?: number, path?: string) {
     let user: UserModel | null = null;
 

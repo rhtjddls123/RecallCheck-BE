@@ -3,6 +3,7 @@ import {
   Controller,
   DefaultValuePipe,
   Get,
+  Param,
   ParseIntPipe,
   Post,
   Query,
@@ -47,6 +48,15 @@ export class RecallController {
   @Get('search')
   async getRecallWithChatbot() {
     return this.recallService.findRecentRecall(5);
+  }
+
+  @Get(':recallSn')
+  @UseGuards(OptionalJwtGuard)
+  async getRecallDetail(
+    @Param('recallSn') recallSn: string,
+    @GetUser() userId?: JwtPayload['sub'],
+  ) {
+    return this.recallService.findRecallDetail(recallSn, userId);
   }
 
   @Get('chatbot-search')
