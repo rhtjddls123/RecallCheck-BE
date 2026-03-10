@@ -9,12 +9,14 @@ import {
   UseInterceptors,
   ClassSerializerInterceptor,
   Delete,
+  Query,
 } from '@nestjs/common';
 import type { Response, Request } from 'express';
 import { AuthService } from './auth.service';
 import { JwtGuard } from './guard/jwt.guard';
 import { UserService } from './user.service';
 import { User } from './decorator/user.decorator';
+import { ActivityPaginateDto } from './dto/activity-paginate.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -103,5 +105,14 @@ export class AuthController {
     res.clearCookie('accessToken');
     res.clearCookie('refreshToken');
     return { success: true };
+  }
+
+  @UseGuards(JwtGuard)
+  @Get('activity')
+  async getActivity(
+    @Query() body: ActivityPaginateDto,
+    @User('sub') userId: number,
+  ) {
+    return await this.userService.cursorPaginateActivity(body, userId);
   }
 }
