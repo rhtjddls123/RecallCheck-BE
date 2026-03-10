@@ -1,10 +1,12 @@
 import {
+  ClassSerializerInterceptor,
   Controller,
   DefaultValuePipe,
   Get,
   ParseIntPipe,
   Post,
   Query,
+  UseInterceptors,
 } from '@nestjs/common';
 import { RecallService } from './recall.service';
 import { PaginateRecallDto } from './dto/paginate-recall.dto';
@@ -13,6 +15,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { RecallModel } from './entity/recall.entity';
 import { Repository } from 'typeorm';
 
+@UseInterceptors(ClassSerializerInterceptor)
 @Controller('recall')
 export class RecallController {
   constructor(

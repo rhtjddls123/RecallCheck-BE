@@ -8,6 +8,7 @@ import { RecallModule } from './recall/recall.module';
 import { Consumer24Module } from './consumer24/consumer24.module';
 import { SafetyInfoModule } from './safety-info/safety-info.module';
 import { OpenaiModule } from './openai/openai.module';
+import { AuthModule } from './auth/auth.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { OpenaiModule } from './openai/openai.module';
     Consumer24Module,
     SafetyInfoModule,
     OpenaiModule,
+    AuthModule,
   ],
   controllers: [AppController],
   providers: [AppService],
