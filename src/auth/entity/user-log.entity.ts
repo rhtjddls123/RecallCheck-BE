@@ -18,6 +18,9 @@ export class UserLogModel extends BaseModel {
   @Column({ nullable: true })
   imageUrl: string;
 
+  @Column()
+  targetUrl: string;
+
   @ManyToOne(() => UserModel, (user) => user.logs, { onDelete: 'CASCADE' })
   user: UserModel;
 }
