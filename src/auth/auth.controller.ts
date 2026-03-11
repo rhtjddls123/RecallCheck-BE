@@ -40,6 +40,7 @@ export class AuthController {
       httpOnly: true,
       secure: true,
       sameSite: 'lax',
+      domain: process.env.COOKIE_DOMAIN,
       maxAge: 1000 * 60 * 60, // 1시간
     });
 
@@ -47,6 +48,7 @@ export class AuthController {
       httpOnly: true,
       secure: true,
       sameSite: 'lax',
+      domain: process.env.COOKIE_DOMAIN,
       maxAge: 1000 * 60 * 60 * 24 * 7, // 7일
     });
 
@@ -66,8 +68,8 @@ export class AuthController {
       }
     }
 
-    res.clearCookie('accessToken');
-    res.clearCookie('refreshToken');
+    res.clearCookie('accessToken', { domain: process.env.COOKIE_DOMAIN });
+    res.clearCookie('refreshToken', { domain: process.env.COOKIE_DOMAIN });
 
     return { success: true };
   }
@@ -86,6 +88,7 @@ export class AuthController {
       secure: true,
       sameSite: 'lax',
       maxAge: 1000 * 60 * 60,
+      domain: process.env.COOKIE_DOMAIN,
     });
 
     return { success: true };
@@ -105,8 +108,8 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ) {
     await this.authService.deleteUser(userId);
-    res.clearCookie('accessToken');
-    res.clearCookie('refreshToken');
+    res.clearCookie('accessToken', { domain: process.env.COOKIE_DOMAIN });
+    res.clearCookie('refreshToken', { domain: process.env.COOKIE_DOMAIN });
     return { success: true };
   }
 
