@@ -46,12 +46,15 @@ export class RecallController {
     @Query() body: PaginateRecallDto,
     @GetUser() userId?: JwtPayload['sub'],
   ) {
-    return this.recallService.findPaginateRecall(body, userId);
+    return this.recallService.findPaginateRecall(
+      { ...body, order: body.order || 'createdAt_desc' },
+      userId,
+    );
   }
 
-  @Get('search')
-  async getRecallWithChatbot() {
-    return this.recallService.findRecentRecall(5);
+  @Get('chatbot-search/paginated')
+  async searchPaginated(@Query() body: PaginateRecallDto) {
+    return this.recallService.findPaginateRecall(body);
   }
 
   @Get('chatbot-search')

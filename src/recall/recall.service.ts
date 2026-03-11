@@ -205,7 +205,10 @@ export class RecallService {
     return {
       products: sorted,
       count: countResult.count,
-      targetUrl: countResult.count > 0 ? 'sss' : null,
+      targetUrl:
+        countResult.count > 0
+          ? `${process.env.FRONTEND_URL}/recall/chatbot-search?query=${encodeURIComponent(query)}${categoryId ? `&category=${categoryId}` : ''}&page=1`
+          : null,
     };
   }
 
@@ -252,40 +255,45 @@ export class RecallService {
   async syncToElasticsearch() {
     const products = await this.recallRepository.find();
     const total = products.length;
+    const BATCH_SIZE = 50; // embedding 1536차원이라 작게
     console.log(`동기화 대상: ${total}개`);
 
     const startTime = Date.now();
+    let done = 0;
 
-    for (let idx = 0; idx < products.length; idx++) {
-      const product = products[idx];
+    for (let i = 0; i < products.length; i += BATCH_SIZE) {
+      const batch = products.slice(i, i + BATCH_SIZE);
 
-      try {
-        await this.esService.index({
-          index: 'recall',
-          id: product.recallSn,
-          document: {
-            recallSn: product.recallSn,
-            cntntsId: product.cntntsId,
-            productNm: product.productNm,
-            makr: product.makr,
-            bsnmNm: product.bsnmNm,
-            embedding: product.embedding, // PostgreSQL에서 그대로 가져옴
-          },
-        });
+      const operations = batch.flatMap((product) => [
+        { index: { _index: 'recall', _id: product.recallSn } },
+        {
+          recallSn: product.recallSn,
+          cntntsId: product.cntntsId,
+          productNm: product.productNm,
+          makr: product.makr,
+          bsnmNm: product.bsnmNm,
+          recallPublictBgnde: product.recallPublictBgnde ?? null,
+          recallPublictEndde: product.recallPublictEndde ?? null,
+          embedding: product.embedding,
+        },
+      ]);
 
-        const done = idx + 1;
-        const percent = ((done / total) * 100).toFixed(1);
-        const elapsed = (Date.now() - startTime) / 1000;
-        const remaining = Math.round((elapsed / done) * (total - done));
-        const remainingMin = Math.floor(remaining / 60);
-        const remainingSec = remaining % 60;
+      const result = await this.esService.bulk({ operations, refresh: false });
 
-        process.stdout.write(
-          `\r[${done}/${total}] ${percent}% | 예상 남은 시간: ${remainingMin}분 ${remainingSec}초 | ${product.productNm.padEnd(30)}`,
+      if (result.errors) {
+        const failed = result.items.filter((item) => item.index?.error);
+        failed.forEach((item) =>
+          console.error(`\n실패: ${item.index?._id}`, item.index?.error),
         );
-      } catch (e) {
-        console.error(`\n실패: ${product.productNm}`, e);
       }
+
+      done += batch.length;
+      const percent = ((done / total) * 100).toFixed(1);
+      const elapsed = (Date.now() - startTime) / 1000;
+      const remaining = Math.round((elapsed / done) * (total - done));
+      process.stdout.write(
+        `\r[${done}/${total}] ${percent}% | 예상 남은 시간: ${Math.floor(remaining / 60)}분 ${remaining % 60}초`,
+      );
     }
 
     process.stdout.write('\n');
@@ -305,8 +313,8 @@ export class RecallService {
     });
 
     if (indexExists) {
-      console.log('인덱스 이미 존재함');
-      return;
+      await this.esService.indices.delete({ index: 'recall' }); // 기존 삭제
+      console.log('기존 인덱스 삭제');
     }
 
     await this.esService.indices.create({
@@ -334,6 +342,9 @@ export class RecallService {
             type: 'text',
             analyzer: 'korean',
             search_analyzer: 'korean_search',
+            fields: {
+              keyword: { type: 'keyword' },
+            },
           },
           makr: {
             type: 'text',
@@ -344,6 +355,16 @@ export class RecallService {
             type: 'text',
             analyzer: 'korean',
             search_analyzer: 'korean_search',
+          },
+          recallPublictBgnde: {
+            type: 'date',
+            format:
+              'yyyy-MM-dd||yyyy-MM-dd HH:mm:ss||strict_date_optional_time',
+          },
+          recallPublictEndde: {
+            type: 'date',
+            format:
+              'yyyy-MM-dd||yyyy-MM-dd HH:mm:ss||strict_date_optional_time',
           },
           embedding: {
             type: 'dense_vector',
@@ -460,56 +481,156 @@ export class RecallService {
   async findPaginateRecall(dto: PaginateRecallDto, userId?: number) {
     const currentPage = dto.page ?? 1;
 
-    const orderMap: Record<string, FindOptionsOrder<RecallModel>> = {
-      createdAt_desc: { recallSn: 'DESC' },
-      createdAt_asc: { recallSn: 'ASC' },
-      name_asc: { productNm: 'ASC' },
-      name_desc: { productNm: 'DESC' },
-    };
-
     const parseDate = (d: string): string => {
       const [year, month, day] = d.split('-');
       return `20${year}-${month}-${day}`;
     };
 
-    let recallSns: string[] | null = null;
+    const esSortMap: Record<
+      string,
+      Record<string, { order: 'asc' | 'desc' }>
+    > = {
+      createdAt_desc: { recallSn: { order: 'desc' } },
+      createdAt_asc: { recallSn: { order: 'asc' } },
+      name_asc: { 'productNm.keyword': { order: 'asc' } },
+      name_desc: { 'productNm.keyword': { order: 'desc' } },
+    };
+
     if (dto.query) {
       const mustConditions: estypes.QueryDslQueryContainer[] = [];
+
       if (dto.category) {
         mustConditions.push({ term: { cntntsId: dto.category } });
       }
 
-      const query = dto.query;
+      // 날짜 필터
+      const dateConditions = (() => {
+        if (dto.startDate && dto.endDate) {
+          return {
+            should: [
+              {
+                range: {
+                  recallPublictBgnde: {
+                    gte: parseDate(dto.startDate),
+                    lte: parseDate(dto.endDate),
+                  },
+                },
+              },
+              {
+                bool: {
+                  must: [
+                    {
+                      bool: {
+                        must_not: { exists: { field: 'recallPublictBgnde' } },
+                      },
+                    },
+                    {
+                      range: {
+                        recallPublictEndde: { gte: parseDate(dto.startDate) },
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+            minimum_should_match: 1,
+          };
+        } else if (dto.startDate) {
+          return {
+            should: [
+              {
+                range: {
+                  recallPublictBgnde: { gte: parseDate(dto.startDate) },
+                },
+              },
+              {
+                bool: {
+                  must: [
+                    {
+                      bool: {
+                        must_not: { exists: { field: 'recallPublictBgnde' } },
+                      },
+                    },
+                    {
+                      range: {
+                        recallPublictEndde: { gte: parseDate(dto.startDate) },
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+            minimum_should_match: 1,
+          };
+        } else if (dto.endDate) {
+          return {
+            should: [
+              {
+                range: { recallPublictBgnde: { lte: parseDate(dto.endDate) } },
+              },
+              {
+                bool: {
+                  must: [
+                    {
+                      bool: {
+                        must_not: { exists: { field: 'recallPublictBgnde' } },
+                      },
+                    },
+                    {
+                      range: {
+                        recallPublictEndde: { gte: parseDate(dto.endDate) },
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+            minimum_should_match: 1,
+          };
+        }
+        return null;
+      })();
+
+      const esQuery = {
+        bool: {
+          must: [
+            ...mustConditions,
+            ...(dateConditions ? [{ bool: dateConditions }] : []),
+          ],
+          should: [
+            { match_phrase: { productNm: { query: dto.query, boost: 3 } } },
+            { match_phrase: { makr: { query: dto.query, boost: 1 } } },
+            { match_phrase: { bsnmNm: { query: dto.query, boost: 1 } } },
+          ],
+          minimum_should_match: 1,
+        },
+      };
+
+      const esSort = dto.order ? [esSortMap[dto.order]] : undefined;
 
       let user: UserModel | null = null;
       if (userId) user = await this.userService.getUserById(userId);
       if (user)
         await this.userService.addUserLog(user, LogTypeEnum.SEARCH, {
-          keyword: query,
+          keyword: dto.query,
           targetUrl: `${process.env.FRONTEND_URL}${this.buildTargetUrl(dto)}`,
         });
 
-      const searchResult = await this.esService.search<RecallEsDocument>({
-        index: 'recall',
-        size: 10000,
-        query: {
-          bool: {
-            must: mustConditions,
-            should: [
-              { match_phrase: { productNm: { query } } },
-              { match_phrase: { makr: { query } } },
-              { match_phrase: { bsnmNm: { query } } },
-            ],
-            minimum_should_match: 1,
-          },
-        },
-      });
+      const [countResult, searchResult] = await Promise.all([
+        this.esService.count({ index: 'recall', query: esQuery }),
+        this.esService.search<RecallEsDocument>({
+          index: 'recall',
+          from: dto.take * (currentPage - 1),
+          size: dto.take,
+          query: esQuery,
+          ...(esSort && { sort: esSort }),
+        }),
+      ]);
 
-      recallSns = searchResult.hits.hits.map(
-        (h) => h._source?.recallSn as string,
-      );
+      const total = countResult.count;
+      const hits = searchResult.hits.hits;
 
-      if (!recallSns.length) {
+      if (!hits.length) {
         return {
           data: [],
           total: 0,
@@ -520,13 +641,41 @@ export class RecallService {
           hasPrev: false,
         };
       }
+
+      const recallSns = hits.map((h) => h._source?.recallSn as string);
+      const dbData = await this.recallRepository.find({
+        where: { recallSn: In(recallSns) },
+      });
+
+      // ES 점수 순서 유지 (name 정렬 아닐 때)
+      const isNameSort = dto.order?.startsWith('name');
+      const data = isNameSort
+        ? dbData
+        : recallSns
+            .map((sn) => dbData.find((p) => p.recallSn === sn))
+            .filter((p): p is RecallModel => p !== undefined);
+
+      return {
+        data,
+        total,
+        page: currentPage,
+        take: dto.take,
+        totalPages: Math.ceil(total / dto.take),
+        hasNext: currentPage * dto.take < total,
+        hasPrev: currentPage > 1,
+      };
     }
 
+    // query 없을 때: 기존 DB 페이지네이션
+    const orderMap: Record<string, FindOptionsOrder<RecallModel>> = {
+      createdAt_desc: { recallSn: 'DESC' },
+      createdAt_asc: { recallSn: 'ASC' },
+      name_asc: { productNm: 'ASC' },
+      name_desc: { productNm: 'DESC' },
+    };
+
     const buildWhere = (): FindOptionsWhere<RecallModel>[] => {
-      const base = {
-        cntntsId: dto.category,
-        ...(recallSns && { recallSn: In(recallSns) }),
-      };
+      const base = { cntntsId: dto.category };
 
       if (dto.startDate && dto.endDate) {
         return [
@@ -572,8 +721,9 @@ export class RecallService {
       return [base];
     };
 
-    const order = orderMap[dto.order] ?? { recallSn: 'DESC' };
-
+    const order = orderMap[dto.order || 'createdAt_desc'] ?? {
+      recallSn: 'DESC',
+    };
     const [data, total] = await this.recallRepository.findAndCount({
       where: buildWhere(),
       skip: dto.take * (currentPage - 1),
