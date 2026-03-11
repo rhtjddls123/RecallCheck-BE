@@ -9,6 +9,7 @@ import { Consumer24Module } from './consumer24/consumer24.module';
 import { SafetyInfoModule } from './safety-info/safety-info.module';
 import { OpenaiModule } from './openai/openai.module';
 import { AuthModule } from './auth/auth.module';
+import { CommonModule } from './common/common.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { AuthModule } from './auth/auth.module';
     SafetyInfoModule,
     OpenaiModule,
     AuthModule,
+    CommonModule,
   ],
   controllers: [AppController],
   providers: [AppService],

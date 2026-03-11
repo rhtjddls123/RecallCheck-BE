@@ -31,26 +31,36 @@ export class RecallModel {
   @Column({ type: 'text', nullable: true })
   bsnmNm: string | null; // 사업자명
 
-  @Column({ type: 'text', nullable: true })
-  modlNmInfo: string | null; // 모델명 정보
-
-  @Column({ type: 'text', nullable: true })
-  stdBrcd: string | null; // 표준 바코드
-
+  @Index()
   @Column({ type: 'text', nullable: true })
   mnfcturPd: string | null; // 제조기간
+
+  @Column({ type: 'text', nullable: true })
+  modlNmInfo: string | null; // 모델명 정보
 
   @Column({ type: 'text', nullable: true })
   mnfcturNoInfo: string | null; // 제조번호 정보
 
   @Column({ type: 'text', nullable: true })
-  distbTmlmtDe: string | null; // 유통기한
+  stdBrcd: string | null; // 표준 바코드
+
+  @Column({ type: 'text', nullable: true })
+  distbTmlmtDe: string | null; // 유통기한 일자
 
   @Column({ type: 'text', nullable: true })
   prmisnNo: string | null; // 허가번호
 
   @Column({ type: 'text', nullable: true })
+  mdlpClNo: string | null; // 의료기기 분류번호
+
+  @Column({ type: 'text', nullable: true })
   aditfield13: string | null; // 제품 상세내용
+
+  @Column({ type: 'text', nullable: true })
+  etcInfo: string | null; // 기타 정보
+
+  @Column({ type: 'text', nullable: true })
+  mainSleoffic: string | null; // 주요 판매처
 
   @Column({ type: 'text', nullable: true })
   shrtcomCn: string | null; // 결함 내용
@@ -65,7 +75,10 @@ export class RecallModel {
   recallPublictEndde: string | null; // 리콜 공표 만료일
 
   @Column({ type: 'text', nullable: true })
-  injryCauseResult: string | null; // 위해 원인
+  injryCauseResult: string | null; // 위해 원인 결과
+
+  @Column({ type: 'text', nullable: true })
+  injryFrgltyTrgter: string | null; // 위해 취약 대상자
 
   @Column({ type: 'text', nullable: true })
   hrmflGrad: string | null; // 위해성 등급
@@ -86,16 +99,16 @@ export class RecallModel {
   recallEndde: string | null; // 리콜 종료일
 
   @Column({ type: 'text', nullable: true })
-  recallProcssInfo: string | null; // 리콜 절차
+  recallProcssInfo: string | null; // 리콜 절차 정보
 
   @Column({ type: 'text', nullable: true })
-  recallEntrpsInfo: string | null; // 문의처
+  recallEntrpsInfo: string | null; // 문의처 / 사업자 주소
 
   @Column({ type: 'text', nullable: true })
   infoOriginInstt: string | null; // 정보 출처 기관
 
   @Column({ type: 'text', nullable: true })
-  infoOriginUrl: string | null; // 정보 출처 URL
+  infoOriginInsttUrl: string | null; // 정보 출처 URL
 
   @Column({ type: 'text', nullable: true })
   infoCreatInstt: string | null; // 정보 생성 기관

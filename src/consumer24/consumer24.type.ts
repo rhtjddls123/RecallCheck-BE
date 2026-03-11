@@ -60,7 +60,7 @@ export interface RawRecallContent {
   recallEntrpsInfo?: string; // 문의처 / 사업자 주소
 
   infoOriginInstt?: string; // 정보 출처 기관
-  infoOriginUrl?: string; // 정보 출처 URL
+  infoOriginInsttUrl?: string; // 정보 출처 URL
   infoCreatInstt?: string; // 정보 생성 기관
   infoCreatUrl?: string; // 정보 생성 URL (||로 구분)
 

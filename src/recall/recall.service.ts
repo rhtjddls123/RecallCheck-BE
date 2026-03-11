@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { RecallModel } from './entity/recall.entity';
 import {
@@ -8,6 +8,7 @@ import {
   In,
   IsNull,
   LessThanOrEqual,
+  Like,
   MoreThanOrEqual,
   Not,
   Repository,
@@ -16,6 +17,10 @@ import { PaginateRecallDto } from './dto/paginate-recall.dto';
 import { ElasticsearchService } from '@nestjs/elasticsearch';
 import { RECALL_CATEGORY_KEY_TYPE } from 'src/consumer24/const/KEYS.const';
 import { OpenAIService } from 'src/openai/openai.service';
+import { UserService } from 'src/auth/user.service';
+import { UserModel } from 'src/auth/entity/user.entity';
+import { LogTypeEnum } from 'src/auth/const/log-type.const';
+import { estypes } from '@elastic/elasticsearch';
 
 interface RecallEsDocument {
   recallSn: string;
@@ -31,9 +36,51 @@ export class RecallService {
   constructor(
     @InjectRepository(RecallModel)
     private readonly recallRepository: Repository<RecallModel>,
-    private openAIService: OpenAIService,
-    private esService: ElasticsearchService,
+    private readonly openAIService: OpenAIService,
+    private readonly esService: ElasticsearchService,
+    private readonly userService: UserService,
   ) {}
+
+  async findRecallDetail(recallSn: string, userId?: number) {
+    const item = await this.recallRepository.findOne({ where: { recallSn } });
+
+    if (!item) {
+      throw new NotFoundException('제품을 찾을 수 없습니다.');
+    }
+    let user: UserModel | null = null;
+
+    if (userId) user = await this.userService.getUserById(userId);
+
+    if (user) {
+      await this.userService.addUserLog(user, LogTypeEnum.VIEW, {
+        productNm: item.productNm,
+        makr: item.makr || item.bsnmNm,
+        imageUrl: item.recallImgUrls?.[0],
+        targetUrl: `${process.env.FRONTEND_URL}/recall/${recallSn}`,
+      });
+    }
+    return item;
+  }
+
+  async chatbotSearchWithLogSave(
+    query: string,
+    categoryId?: RECALL_CATEGORY_KEY_TYPE,
+    userId?: number,
+    path?: string,
+  ) {
+    const searchResult = await this.chatbotSearch(query, categoryId);
+
+    if (userId && path) {
+      const user = await this.userService.getUserById(userId);
+      if (user && searchResult.data.targetUrl) {
+        await this.userService.addUserLog(user, LogTypeEnum.IMG, {
+          imageUrl: path,
+          targetUrl: searchResult.data.targetUrl,
+        });
+      }
+    }
+    return searchResult;
+  }
 
   async chatbotSearch(query: string, categoryId?: RECALL_CATEGORY_KEY_TYPE) {
     // 카테고리id가 없을 경우 전체 카테고리에서 검색
@@ -63,7 +110,11 @@ export class RecallService {
       };
     }
 
-    return { found: false, data: { products: [], count: 0 } };
+    return {
+      found: false,
+      data: { products: [], count: 0, targetUrl: null },
+      differentCategory: false,
+    };
   }
 
   // ES exact 매칭 (LIKE 역할)
@@ -152,7 +203,14 @@ export class RecallService {
       .map((sn) => data.find((p) => p.recallSn === sn))
       .filter((p): p is RecallModel => p !== undefined);
 
-    return { products: sorted, count: countResult.count };
+    return {
+      products: sorted,
+      count: countResult.count,
+      targetUrl:
+        countResult.count > 0
+          ? `${process.env.FRONTEND_URL}/recall/chatbot-search?query=${encodeURIComponent(query)}${categoryId ? `&category=${categoryId}` : ''}&page=1`
+          : null,
+    };
   }
 
   // ES 임베딩 검색
@@ -198,40 +256,46 @@ export class RecallService {
   async syncToElasticsearch() {
     const products = await this.recallRepository.find();
     const total = products.length;
+    const BATCH_SIZE = 50;
     console.log(`동기화 대상: ${total}개`);
 
     const startTime = Date.now();
+    let done = 0;
 
-    for (let idx = 0; idx < products.length; idx++) {
-      const product = products[idx];
+    for (let i = 0; i < products.length; i += BATCH_SIZE) {
+      const batch = products.slice(i, i + BATCH_SIZE);
 
-      try {
-        await this.esService.index({
-          index: 'recall',
-          id: product.recallSn,
-          document: {
-            recallSn: product.recallSn,
-            cntntsId: product.cntntsId,
-            productNm: product.productNm,
-            makr: product.makr,
-            bsnmNm: product.bsnmNm,
-            embedding: product.embedding, // PostgreSQL에서 그대로 가져옴
-          },
-        });
+      const operations = batch.flatMap((product) => [
+        { index: { _index: 'recall', _id: product.recallSn } },
+        {
+          recallSn: product.recallSn,
+          cntntsId: product.cntntsId,
+          productNm: product.productNm,
+          productNmNormalized: product.productNm?.replace(/\s+/g, '') ?? null, // 추가
+          makr: product.makr,
+          bsnmNm: product.bsnmNm,
+          recallPublictBgnde: product.recallPublictBgnde ?? null,
+          recallPublictEndde: product.recallPublictEndde ?? null,
+          embedding: product.embedding,
+        },
+      ]);
 
-        const done = idx + 1;
-        const percent = ((done / total) * 100).toFixed(1);
-        const elapsed = (Date.now() - startTime) / 1000;
-        const remaining = Math.round((elapsed / done) * (total - done));
-        const remainingMin = Math.floor(remaining / 60);
-        const remainingSec = remaining % 60;
+      const result = await this.esService.bulk({ operations, refresh: false });
 
-        process.stdout.write(
-          `\r[${done}/${total}] ${percent}% | 예상 남은 시간: ${remainingMin}분 ${remainingSec}초 | ${product.productNm.padEnd(30)}`,
+      if (result.errors) {
+        const failed = result.items.filter((item) => item.index?.error);
+        failed.forEach((item) =>
+          console.error(`\n실패: ${item.index?._id}`, item.index?.error),
         );
-      } catch (e) {
-        console.error(`\n실패: ${product.productNm}`, e);
       }
+
+      done += batch.length;
+      const percent = ((done / total) * 100).toFixed(1);
+      const elapsed = (Date.now() - startTime) / 1000;
+      const remaining = Math.round((elapsed / done) * (total - done));
+      process.stdout.write(
+        `\r[${done}/${total}] ${percent}% | 예상 남은 시간: ${Math.floor(remaining / 60)}분 ${remaining % 60}초`,
+      );
     }
 
     process.stdout.write('\n');
@@ -251,8 +315,8 @@ export class RecallService {
     });
 
     if (indexExists) {
-      console.log('인덱스 이미 존재함');
-      return;
+      await this.esService.indices.delete({ index: 'recall' }); // 기존 삭제
+      console.log('기존 인덱스 삭제');
     }
 
     await this.esService.indices.create({
@@ -280,6 +344,15 @@ export class RecallService {
             type: 'text',
             analyzer: 'korean',
             search_analyzer: 'korean_search',
+            fields: {
+              keyword: { type: 'keyword' },
+            },
+          },
+          productNmNormalized: {
+            // 추가
+            type: 'text',
+            analyzer: 'korean',
+            search_analyzer: 'korean_search',
           },
           makr: {
             type: 'text',
@@ -290,6 +363,14 @@ export class RecallService {
             type: 'text',
             analyzer: 'korean',
             search_analyzer: 'korean_search',
+          },
+          recallPublictBgnde: {
+            type: 'date',
+            format: 'yyyyMMdd||yyyy-MM-dd||strict_date_optional_time',
+          },
+          recallPublictEndde: {
+            type: 'date',
+            format: 'yyyyMMdd||yyyy-MM-dd||strict_date_optional_time',
           },
           embedding: {
             type: 'dense_vector',
@@ -403,9 +484,199 @@ export class RecallService {
     });
   }
 
-  async findPaginateRecall(dto: PaginateRecallDto) {
+  async findPaginateRecall(
+    dto: PaginateRecallDto,
+    type: 'chatbot' | 'normal',
+    userId?: number,
+  ) {
     const currentPage = dto.page ?? 1;
 
+    const parseDate = (d: string): string => {
+      const [year, month, day] = d.split('-');
+      return `20${year}-${month}-${day}`;
+    };
+
+    const esSortMap: Record<
+      string,
+      Record<string, { order: 'asc' | 'desc' }>
+    > = {
+      createdAt_desc: { recallSn: { order: 'desc' } },
+      createdAt_asc: { recallSn: { order: 'asc' } },
+      name_asc: { 'productNm.keyword': { order: 'asc' } },
+      name_desc: { 'productNm.keyword': { order: 'desc' } },
+    };
+
+    if (dto.query && type === 'chatbot') {
+      const mustConditions: estypes.QueryDslQueryContainer[] = [];
+
+      if (dto.category) {
+        mustConditions.push({ term: { cntntsId: dto.category } });
+      }
+
+      // 날짜 필터
+      const dateConditions = (() => {
+        if (dto.startDate && dto.endDate) {
+          return {
+            should: [
+              {
+                range: {
+                  recallPublictBgnde: {
+                    gte: parseDate(dto.startDate),
+                    lte: parseDate(dto.endDate),
+                  },
+                },
+              },
+              {
+                bool: {
+                  must: [
+                    {
+                      bool: {
+                        must_not: { exists: { field: 'recallPublictBgnde' } },
+                      },
+                    },
+                    {
+                      range: {
+                        recallPublictEndde: { gte: parseDate(dto.startDate) },
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+            minimum_should_match: 1,
+          };
+        } else if (dto.startDate) {
+          return {
+            should: [
+              {
+                range: {
+                  recallPublictBgnde: { gte: parseDate(dto.startDate) },
+                },
+              },
+              {
+                bool: {
+                  must: [
+                    {
+                      bool: {
+                        must_not: { exists: { field: 'recallPublictBgnde' } },
+                      },
+                    },
+                    {
+                      range: {
+                        recallPublictEndde: { gte: parseDate(dto.startDate) },
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+            minimum_should_match: 1,
+          };
+        } else if (dto.endDate) {
+          return {
+            should: [
+              {
+                range: { recallPublictBgnde: { lte: parseDate(dto.endDate) } },
+              },
+              {
+                bool: {
+                  must: [
+                    {
+                      bool: {
+                        must_not: { exists: { field: 'recallPublictBgnde' } },
+                      },
+                    },
+                    {
+                      range: {
+                        recallPublictEndde: { gte: parseDate(dto.endDate) },
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+            minimum_should_match: 1,
+          };
+        }
+        return null;
+      })();
+
+      const esQuery = {
+        bool: {
+          must: [
+            ...mustConditions,
+            ...(dateConditions ? [{ bool: dateConditions }] : []),
+          ],
+          should: [
+            { match_phrase: { productNm: { query: dto.query, boost: 3 } } },
+            { match_phrase: { makr: { query: dto.query, boost: 1 } } },
+            { match_phrase: { bsnmNm: { query: dto.query, boost: 1 } } },
+          ],
+          minimum_should_match: 1,
+        },
+      };
+
+      const esSort = dto.order ? [esSortMap[dto.order]] : undefined;
+
+      let user: UserModel | null = null;
+      if (userId) user = await this.userService.getUserById(userId);
+      if (user)
+        await this.userService.addUserLog(user, LogTypeEnum.SEARCH, {
+          keyword: dto.query,
+          targetUrl: `${process.env.FRONTEND_URL}${this.buildTargetUrl(dto)}`,
+        });
+
+      const [countResult, searchResult] = await Promise.all([
+        this.esService.count({ index: 'recall', query: esQuery }),
+        this.esService.search<RecallEsDocument>({
+          index: 'recall',
+          from: dto.take * (currentPage - 1),
+          size: dto.take,
+          query: esQuery,
+          ...(esSort && { sort: esSort }),
+        }),
+      ]);
+
+      const total = countResult.count;
+      const hits = searchResult.hits.hits;
+
+      if (!hits.length) {
+        return {
+          data: [],
+          total: 0,
+          page: currentPage,
+          take: dto.take,
+          totalPages: 0,
+          hasNext: false,
+          hasPrev: false,
+        };
+      }
+
+      const recallSns = hits.map((h) => h._source?.recallSn as string);
+      const dbData = await this.recallRepository.find({
+        where: { recallSn: In(recallSns) },
+      });
+
+      // ES 점수 순서 유지 (name 정렬 아닐 때)
+      const isNameSort = dto.order?.startsWith('name');
+      const data = isNameSort
+        ? dbData
+        : recallSns
+            .map((sn) => dbData.find((p) => p.recallSn === sn))
+            .filter((p): p is RecallModel => p !== undefined);
+
+      return {
+        data,
+        total,
+        page: currentPage,
+        take: dto.take,
+        totalPages: Math.ceil(total / dto.take),
+        hasNext: currentPage * dto.take < total,
+        hasPrev: currentPage > 1,
+      };
+    }
+
+    // query 없을 때: 기존 DB 페이지네이션
     const orderMap: Record<string, FindOptionsOrder<RecallModel>> = {
       createdAt_desc: { recallSn: 'DESC' },
       createdAt_asc: { recallSn: 'ASC' },
@@ -413,63 +684,82 @@ export class RecallService {
       name_desc: { productNm: 'DESC' },
     };
 
-    const parseDate = (d: string): string => {
-      const [year, month, day] = d.split('-');
-      return `20${year}-${month}-${day}`;
-    };
+    let user: UserModel | null = null;
+    if (userId) user = await this.userService.getUserById(userId);
+    if (user && dto.query)
+      await this.userService.addUserLog(user, LogTypeEnum.SEARCH, {
+        keyword: dto.query,
+        targetUrl: `${process.env.FRONTEND_URL}${this.buildTargetUrl(dto)}`,
+      });
 
     const buildWhere = (): FindOptionsWhere<RecallModel>[] => {
       const base = { cntntsId: dto.category };
+      const queryConditions: FindOptionsWhere<RecallModel>[] = dto.query
+        ? [
+            { productNm: Like(`%${dto.query}%`) },
+            { makr: Like(`%${dto.query}%`) },
+            { bsnmNm: Like(`%${dto.query}%`) },
+          ]
+        : [{}];
 
       if (dto.startDate && dto.endDate) {
-        return [
+        return queryConditions.flatMap((qc) => [
           {
             ...base,
+            ...qc,
             recallPublictBgnde: Between(
-              parseDate(dto.startDate),
-              parseDate(dto.endDate),
+              parseDate(dto.startDate!),
+              parseDate(dto.endDate!),
             ),
           },
           {
             ...base,
+            ...qc,
             recallPublictBgnde: IsNull(),
-            recallPublictEndde: MoreThanOrEqual(parseDate(dto.startDate)),
+            recallPublictEndde: MoreThanOrEqual(parseDate(dto.startDate!)),
           },
-        ] as FindOptionsWhere<RecallModel>[];
+        ]);
       } else if (dto.startDate) {
-        return [
+        return queryConditions.flatMap((qc) => [
           {
             ...base,
-            recallPublictBgnde: MoreThanOrEqual(parseDate(dto.startDate)),
+            ...qc,
+            recallPublictBgnde: MoreThanOrEqual(parseDate(dto.startDate!)),
           },
           {
             ...base,
+            ...qc,
             recallPublictBgnde: IsNull(),
-            recallPublictEndde: MoreThanOrEqual(parseDate(dto.startDate)),
+            recallPublictEndde: MoreThanOrEqual(parseDate(dto.startDate!)),
           },
-        ];
+        ]);
       } else if (dto.endDate) {
-        return [
+        return queryConditions.flatMap((qc) => [
           {
             ...base,
-            recallPublictBgnde: LessThanOrEqual(parseDate(dto.endDate)),
+            ...qc,
+            recallPublictBgnde: LessThanOrEqual(parseDate(dto.endDate!)),
           },
           {
             ...base,
+            ...qc,
             recallPublictBgnde: IsNull(),
-            recallPublictEndde: MoreThanOrEqual(parseDate(dto.endDate)),
+            recallPublictEndde: MoreThanOrEqual(parseDate(dto.endDate!)),
           },
-        ];
+        ]);
       }
 
-      return [base];
+      return queryConditions.map((qc) => ({ ...base, ...qc }));
     };
 
+    const order = orderMap[dto.order || 'createdAt_desc'] ?? {
+      recallSn: 'DESC',
+    };
     const [data, total] = await this.recallRepository.findAndCount({
       where: buildWhere(),
       skip: dto.take * (currentPage - 1),
       take: dto.take,
-      order: orderMap[dto.order],
+      order,
     });
 
     return {
@@ -481,5 +771,18 @@ export class RecallService {
       hasNext: currentPage * dto.take < total,
       hasPrev: currentPage > 1,
     };
+  }
+
+  private buildTargetUrl(dto: PaginateRecallDto): string {
+    const params = new URLSearchParams();
+
+    if (dto.query) params.set('query', dto.query);
+    if (dto.category) params.set('category', dto.category);
+    if (dto.startDate) params.set('startDate', dto.startDate);
+    if (dto.endDate) params.set('endDate', dto.endDate);
+    if (dto.order) params.set('order', dto.order);
+    if (dto.page) params.set('page', dto.page.toString());
+
+    return `/recall?${params.toString()}`;
   }
 }

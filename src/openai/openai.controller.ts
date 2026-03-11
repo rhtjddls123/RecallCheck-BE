@@ -4,11 +4,15 @@ import {
   Post,
   Query,
   UploadedFile,
+  UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { OpenAIService } from './openai.service';
 import { FileInterceptor } from '@nestjs/platform-express';
 import sharp from 'sharp';
+import { OptionalJwtGuard } from 'src/auth/guard/optional-jwt.guard';
+import { GetUser } from 'src/auth/decorator/get-userId.decorator';
+import type { JwtPayload } from 'src/auth/auth.service';
 
 @Controller('openai')
 export class OpenaiController {
@@ -20,8 +24,12 @@ export class OpenaiController {
   }
 
   @Post('image-ocr')
+  @UseGuards(OptionalJwtGuard)
   @UseInterceptors(FileInterceptor('image'))
-  async getImageInfo(@UploadedFile() file: Express.Multer.File) {
+  async getImageInfo(
+    @UploadedFile() file: Express.Multer.File,
+    @GetUser() userId?: JwtPayload['sub'],
+  ) {
     const allowedMimeTypes = [
       'image/jpeg',
       'image/png',
@@ -36,6 +44,7 @@ export class OpenaiController {
         found: false,
         message: 'jpeg, png, gif, webp, heic 형식만 지원합니다.',
         query: null,
+        path: null,
       };
     }
 
@@ -48,9 +57,11 @@ export class OpenaiController {
     }
 
     const imageBase64 = buffer.toString('base64');
-    const { query } = await this.openaiService.extractProductInfo(
+    const { query, path } = await this.openaiService.extractProductInfo(
       imageBase64,
       mimetype,
+      file,
+      userId,
     );
 
     if (!query) {
@@ -58,6 +69,7 @@ export class OpenaiController {
         found: false,
         message: '이미지에서 제품 정보를 찾을 수 없습니다.',
         query: null,
+        path: null,
       };
     }
 
@@ -65,6 +77,7 @@ export class OpenaiController {
       found: true,
       message: '이미지에서 제품 정보를 불러왔습니다.',
       query,
+      path,
     };
   }
 }
