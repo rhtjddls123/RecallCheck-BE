@@ -48,13 +48,14 @@ export class RecallController {
   ) {
     return this.recallService.findPaginateRecall(
       { ...body, order: body.order || 'createdAt_desc' },
+      'normal',
       userId,
     );
   }
 
   @Get('chatbot-search/paginated')
   async searchPaginated(@Query() body: PaginateRecallDto) {
-    return this.recallService.findPaginateRecall(body);
+    return this.recallService.findPaginateRecall(body, 'chatbot');
   }
 
   @Get('chatbot-search')

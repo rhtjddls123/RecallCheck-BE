@@ -8,6 +8,7 @@ import {
   In,
   IsNull,
   LessThanOrEqual,
+  Like,
   MoreThanOrEqual,
   Not,
   Repository,
@@ -255,7 +256,7 @@ export class RecallService {
   async syncToElasticsearch() {
     const products = await this.recallRepository.find();
     const total = products.length;
-    const BATCH_SIZE = 50; // embedding 1536차원이라 작게
+    const BATCH_SIZE = 50;
     console.log(`동기화 대상: ${total}개`);
 
     const startTime = Date.now();
@@ -270,6 +271,7 @@ export class RecallService {
           recallSn: product.recallSn,
           cntntsId: product.cntntsId,
           productNm: product.productNm,
+          productNmNormalized: product.productNm?.replace(/\s+/g, '') ?? null, // 추가
           makr: product.makr,
           bsnmNm: product.bsnmNm,
           recallPublictBgnde: product.recallPublictBgnde ?? null,
@@ -346,6 +348,12 @@ export class RecallService {
               keyword: { type: 'keyword' },
             },
           },
+          productNmNormalized: {
+            // 추가
+            type: 'text',
+            analyzer: 'korean',
+            search_analyzer: 'korean_search',
+          },
           makr: {
             type: 'text',
             analyzer: 'korean',
@@ -358,13 +366,11 @@ export class RecallService {
           },
           recallPublictBgnde: {
             type: 'date',
-            format:
-              'yyyy-MM-dd||yyyy-MM-dd HH:mm:ss||strict_date_optional_time',
+            format: 'yyyyMMdd||yyyy-MM-dd||strict_date_optional_time',
           },
           recallPublictEndde: {
             type: 'date',
-            format:
-              'yyyy-MM-dd||yyyy-MM-dd HH:mm:ss||strict_date_optional_time',
+            format: 'yyyyMMdd||yyyy-MM-dd||strict_date_optional_time',
           },
           embedding: {
             type: 'dense_vector',
@@ -478,7 +484,11 @@ export class RecallService {
     });
   }
 
-  async findPaginateRecall(dto: PaginateRecallDto, userId?: number) {
+  async findPaginateRecall(
+    dto: PaginateRecallDto,
+    type: 'chatbot' | 'normal',
+    userId?: number,
+  ) {
     const currentPage = dto.page ?? 1;
 
     const parseDate = (d: string): string => {
@@ -496,7 +506,7 @@ export class RecallService {
       name_desc: { 'productNm.keyword': { order: 'desc' } },
     };
 
-    if (dto.query) {
+    if (dto.query && type === 'chatbot') {
       const mustConditions: estypes.QueryDslQueryContainer[] = [];
 
       if (dto.category) {
@@ -674,51 +684,72 @@ export class RecallService {
       name_desc: { productNm: 'DESC' },
     };
 
+    let user: UserModel | null = null;
+    if (userId) user = await this.userService.getUserById(userId);
+    if (user && dto.query)
+      await this.userService.addUserLog(user, LogTypeEnum.SEARCH, {
+        keyword: dto.query,
+        targetUrl: `${process.env.FRONTEND_URL}${this.buildTargetUrl(dto)}`,
+      });
+
     const buildWhere = (): FindOptionsWhere<RecallModel>[] => {
       const base = { cntntsId: dto.category };
+      const queryConditions: FindOptionsWhere<RecallModel>[] = dto.query
+        ? [
+            { productNm: Like(`%${dto.query}%`) },
+            { makr: Like(`%${dto.query}%`) },
+            { bsnmNm: Like(`%${dto.query}%`) },
+          ]
+        : [{}];
 
       if (dto.startDate && dto.endDate) {
-        return [
+        return queryConditions.flatMap((qc) => [
           {
             ...base,
+            ...qc,
             recallPublictBgnde: Between(
-              parseDate(dto.startDate),
-              parseDate(dto.endDate),
+              parseDate(dto.startDate!),
+              parseDate(dto.endDate!),
             ),
           },
           {
             ...base,
+            ...qc,
             recallPublictBgnde: IsNull(),
-            recallPublictEndde: MoreThanOrEqual(parseDate(dto.startDate)),
+            recallPublictEndde: MoreThanOrEqual(parseDate(dto.startDate!)),
           },
-        ];
+        ]);
       } else if (dto.startDate) {
-        return [
+        return queryConditions.flatMap((qc) => [
           {
             ...base,
-            recallPublictBgnde: MoreThanOrEqual(parseDate(dto.startDate)),
+            ...qc,
+            recallPublictBgnde: MoreThanOrEqual(parseDate(dto.startDate!)),
           },
           {
             ...base,
+            ...qc,
             recallPublictBgnde: IsNull(),
-            recallPublictEndde: MoreThanOrEqual(parseDate(dto.startDate)),
+            recallPublictEndde: MoreThanOrEqual(parseDate(dto.startDate!)),
           },
-        ];
+        ]);
       } else if (dto.endDate) {
-        return [
+        return queryConditions.flatMap((qc) => [
           {
             ...base,
-            recallPublictBgnde: LessThanOrEqual(parseDate(dto.endDate)),
+            ...qc,
+            recallPublictBgnde: LessThanOrEqual(parseDate(dto.endDate!)),
           },
           {
             ...base,
+            ...qc,
             recallPublictBgnde: IsNull(),
-            recallPublictEndde: MoreThanOrEqual(parseDate(dto.endDate)),
+            recallPublictEndde: MoreThanOrEqual(parseDate(dto.endDate!)),
           },
-        ];
+        ]);
       }
 
-      return [base];
+      return queryConditions.map((qc) => ({ ...base, ...qc }));
     };
 
     const order = orderMap[dto.order || 'createdAt_desc'] ?? {
