@@ -9,11 +9,13 @@ import { Consumer24Scheduler } from './consumer24.scheduler';
 import { Consumer24Mapper } from './consumer24.mapper';
 import { RecallModel } from 'src/recall/entity/recall.entity';
 import { RecallModule } from 'src/recall/recall.module';
+import { NotificationModule } from 'src/notification/notification.module';
 
 @Module({
   imports: [
     HttpModule,
     RecallModule,
+    NotificationModule,
     TypeOrmModule.forFeature([SafetyInfoModel, RecallModel]),
   ],
   controllers: [Consumer24Controller],

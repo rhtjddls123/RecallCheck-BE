@@ -116,6 +116,8 @@ export class Consumer24Service implements OnModuleInit {
    * mode값이 all일 경우 모든 데이터 저장, recent일 경우 최근 100개 데이터 저장
    */
   async saveAllCategoryRecalls(mode: 'all' | 'recent') {
+    const newProducts: Partial<RecallModel>[] = [];
+
     for (const categoryCode of Object.keys(this.serviceKeys)) {
       const { content: datas, totalCount } =
         await this.findAllRecallsByCategoryCode(
@@ -139,11 +141,20 @@ export class Consumer24Service implements OnModuleInit {
           console.log(`${progress}% 진행중... (${i + 1}/${totalCount})`);
           nextMilestone += 10;
         }
+
+        const existing = await this.recallRepository.findOne({
+          where: { recallSn: entity.recallSn },
+        });
+
+        if (!existing) {
+          newProducts.push(entity);
+        }
+
         await this.recallRepository.upsert(entity, ['recallSn']);
       }
     }
 
-    return true;
+    return newProducts;
   }
 
   /**

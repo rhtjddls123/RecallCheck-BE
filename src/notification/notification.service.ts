@@ -3,6 +3,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { NotificationSettingModel } from './entity/notification-setting.entity';
 import { Repository } from 'typeorm';
 import { RecallMenuModel } from 'src/recall/entity/recall-menu.entity';
+import { RecallModel } from 'src/recall/entity/recall.entity';
+import { NotificationModel } from './entity/notification.entity';
 import { HIDDEN_MENU_IDS, RELATED_MENU_IDS } from './const/RELATED_MENU_IDS';
 
 @Injectable()
@@ -10,6 +12,8 @@ export class NotificationService {
   constructor(
     @InjectRepository(NotificationSettingModel)
     private readonly settingRepository: Repository<NotificationSettingModel>,
+    @InjectRepository(NotificationModel)
+    private readonly notificationRepository: Repository<NotificationModel>,
     @InjectRepository(RecallMenuModel)
     private readonly menuRepository: Repository<RecallMenuModel>,
   ) {}
@@ -71,5 +75,30 @@ export class NotificationService {
     });
 
     return datas.filter((data) => !HIDDEN_MENU_IDS.includes(data.menu.id));
+  }
+
+  async sendNotifications(newProducts: Partial<RecallModel>[]) {
+    for (const product of newProducts) {
+      const settings = await this.settingRepository.find({
+        where: {
+          menu: { id: product.cntntsId },
+          isActive: true,
+        },
+        relations: ['user', 'menu'],
+      });
+
+      if (settings.length === 0) continue;
+
+      const notifications = settings.map((setting) =>
+        this.notificationRepository.create({
+          user: setting.user,
+          title: `[${setting.menu.name}] 새로운 리콜 제품`,
+          body: product.productNm,
+          recall: { recallSn: product.recallSn },
+        }),
+      );
+
+      await this.notificationRepository.save(notifications);
+    }
   }
 }
