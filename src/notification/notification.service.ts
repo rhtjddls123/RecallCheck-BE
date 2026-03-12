@@ -1,12 +1,9 @@
-import {
-  BadRequestException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { NotificationSettingModel } from './entity/notification-setting.entity';
 import { Repository } from 'typeorm';
 import { RecallMenuModel } from 'src/recall/entity/recall-menu.entity';
+import { HIDDEN_MENU_IDS, RELATED_MENU_IDS } from './const/RELATED_MENU_IDS';
 
 @Injectable()
 export class NotificationService {
@@ -28,43 +25,51 @@ export class NotificationService {
   async addSetting(userId: number, menuId: string) {
     await this.validateMenu(menuId);
 
-    const existing = await this.settingRepository.findOne({
-      where: { user: { id: userId }, menu: { id: menuId } },
-    });
+    const menuIds = RELATED_MENU_IDS[menuId] ?? [menuId];
 
-    if (existing) {
-      await this.settingRepository.update(existing.id, {
-        isActive: true,
+    for (const id of menuIds) {
+      const existing = await this.settingRepository.findOne({
+        where: { user: { id: userId }, menu: { id } },
       });
-      return { message: '알림 설정이 활성화되었습니다' };
+
+      if (existing) {
+        await this.settingRepository.update(existing.id, { isActive: true });
+        continue;
+      }
+
+      await this.settingRepository.save({
+        user: { id: userId },
+        menu: { id },
+      });
     }
 
-    await this.settingRepository.save({
-      user: { id: userId },
-      menu: { id: menuId },
-    });
     return { message: '알림 설정이 추가되었습니다' };
   }
 
   async removeSetting(userId: number, menuId: string) {
     await this.validateMenu(menuId);
 
-    const existing = await this.settingRepository.findOne({
-      where: { user: { id: userId }, menu: { id: menuId }, isActive: true },
-    });
+    const menuIds = RELATED_MENU_IDS[menuId] ?? [menuId];
 
-    if (!existing) {
-      throw new NotFoundException('해당 알림 설정이 존재하지 않습니다');
+    for (const id of menuIds) {
+      const existing = await this.settingRepository.findOne({
+        where: { user: { id: userId }, menu: { id }, isActive: true },
+      });
+
+      if (!existing) continue;
+
+      await this.settingRepository.update(existing.id, { isActive: false });
     }
 
-    await this.settingRepository.update(existing.id, { isActive: false });
     return { message: '알림 설정이 비활성화되었습니다' };
   }
 
   async getSettings(userId: number) {
-    return this.settingRepository.find({
+    const datas = await this.settingRepository.find({
       where: { user: { id: userId }, isActive: true },
       relations: { menu: true },
     });
+
+    return datas.filter((data) => !HIDDEN_MENU_IDS.includes(data.menu.id));
   }
 }
