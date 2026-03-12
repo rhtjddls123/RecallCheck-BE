@@ -3,6 +3,9 @@ import { BaseModel } from 'src/common/entity/base.entity';
 import { Entity, Column, OneToMany } from 'typeorm';
 import { UserLogModel } from './user-log.entity';
 import { RolesEnum } from '../const/roles.const';
+import { NotificationSettingModel } from 'src/notification/entity/notification-setting.entity';
+import { NotificationModel } from 'src/notification/entity/notification.entity';
+import { FcmSubscriptionModel } from 'src/notification/entity/fcm-subscription.entity';
 
 @Entity()
 export class UserModel extends BaseModel {
@@ -27,4 +30,13 @@ export class UserModel extends BaseModel {
 
   @OneToMany(() => UserLogModel, (logs) => logs.user)
   logs: UserLogModel[];
+
+  @OneToMany(() => NotificationSettingModel, (setting) => setting.user)
+  notificationSettings: NotificationSettingModel[];
+
+  @OneToMany(() => NotificationModel, (noti) => noti.user)
+  notifications: NotificationModel[];
+
+  @OneToMany(() => FcmSubscriptionModel, (fcm) => fcm.user)
+  fcmSubscriptions: FcmSubscriptionModel[];
 }

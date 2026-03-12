@@ -28,6 +28,9 @@ export class AuthController {
     private readonly userService: UserService,
   ) {}
 
+  private domain =
+    process.env.NODE_ENV === 'production' ? '.recall-check.site' : undefined;
+
   @Post('kakao')
   async kakaoLogin(
     @Body('code') code: string,
@@ -40,10 +43,7 @@ export class AuthController {
       httpOnly: true,
       secure: true,
       sameSite: 'lax',
-      domain:
-        process.env.NODE_ENV === 'production'
-          ? '.recall-check.site'
-          : undefined,
+      domain: this.domain,
       maxAge: 1000 * 60 * 60, // 1시간
     });
 
@@ -51,10 +51,7 @@ export class AuthController {
       httpOnly: true,
       secure: true,
       sameSite: 'lax',
-      domain:
-        process.env.NODE_ENV === 'production'
-          ? '.recall-check.site'
-          : undefined,
+      domain: this.domain,
       maxAge: 1000 * 60 * 60 * 24 * 7, // 7일
     });
 
@@ -75,16 +72,10 @@ export class AuthController {
     }
 
     res.clearCookie('accessToken', {
-      domain:
-        process.env.NODE_ENV === 'production'
-          ? '.recall-check.site'
-          : undefined,
+      domain: this.domain,
     });
     res.clearCookie('refreshToken', {
-      domain:
-        process.env.NODE_ENV === 'production'
-          ? '.recall-check.site'
-          : undefined,
+      domain: this.domain,
     });
 
     return { success: true };
@@ -97,17 +88,23 @@ export class AuthController {
   ) {
     const refreshToken = req.cookies['refreshToken'] as string;
 
-    const { accessToken } = await this.authService.refresh(refreshToken);
+    const { accessToken, refreshToken: newRefreshToken } =
+      await this.authService.refresh(refreshToken);
 
     res.cookie('accessToken', accessToken, {
       httpOnly: true,
       secure: true,
       sameSite: 'lax',
       maxAge: 1000 * 60 * 60,
-      domain:
-        process.env.NODE_ENV === 'production'
-          ? '.recall-check.site'
-          : undefined,
+      domain: this.domain,
+    });
+
+    res.cookie('refreshToken', newRefreshToken, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'lax',
+      domain: this.domain,
+      maxAge: 1000 * 60 * 60 * 24 * 7,
     });
 
     return { success: true };
@@ -128,16 +125,10 @@ export class AuthController {
   ) {
     await this.authService.deleteUser(userId);
     res.clearCookie('accessToken', {
-      domain:
-        process.env.NODE_ENV === 'production'
-          ? '.recall-check.site'
-          : undefined,
+      domain: this.domain,
     });
     res.clearCookie('refreshToken', {
-      domain:
-        process.env.NODE_ENV === 'production'
-          ? '.recall-check.site'
-          : undefined,
+      domain: this.domain,
     });
     return { success: true };
   }

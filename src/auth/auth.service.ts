@@ -91,7 +91,13 @@ export class AuthService {
   }
 
   async refresh(refreshToken: string) {
-    const payload = this.verifyToken(refreshToken);
+    let payload: JwtPayload;
+
+    try {
+      payload = this.verifyToken(refreshToken);
+    } catch {
+      throw new UnauthorizedException('유효하지 않은 토큰입니다');
+    }
 
     if (payload.type !== 'refresh') {
       throw new UnauthorizedException('리프레시 토큰이 아닙니다');
@@ -106,8 +112,13 @@ export class AuthService {
     }
 
     const newAccessToken = this.signToken(user, false);
+    const newRefreshToken = this.signToken(user, true);
 
-    return { accessToken: newAccessToken };
+    await this.userRepository.update(user.id, {
+      refreshToken: newRefreshToken,
+    });
+
+    return { accessToken: newAccessToken, refreshToken: newRefreshToken };
   }
 
   async logout(userId: number) {
