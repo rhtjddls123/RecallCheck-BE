@@ -8,6 +8,7 @@ import { FcmSubscriptionModel } from './entity/fcm-subscription.entity';
 import { AuthModule } from 'src/auth/auth.module';
 import { RecallMenuModel } from 'src/recall/entity/recall-menu.entity';
 import { RecallModule } from 'src/recall/recall.module';
+import { NotificationSseService } from './notification-sse.service';
 
 @Module({
   imports: [
@@ -21,7 +22,7 @@ import { RecallModule } from 'src/recall/recall.module';
     RecallModule,
   ],
   controllers: [NotificationController],
-  providers: [NotificationService],
-  exports: [NotificationService],
+  providers: [NotificationService, NotificationSseService],
+  exports: [NotificationService, NotificationSseService],
 })
 export class NotificationModule {}

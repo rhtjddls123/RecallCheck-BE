@@ -7,6 +7,7 @@ import {
   Patch,
   Post,
   Query,
+  Sse,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
@@ -14,11 +15,15 @@ import { NotificationService } from './notification.service';
 import { User } from 'src/auth/decorator/user.decorator';
 import { JwtGuard } from 'src/auth/guard/jwt.guard';
 import { NotificationPaginateDto } from './dto/notificationPaginate.dto';
+import { NotificationSseService } from './notification-sse.service';
 
 @UseInterceptors(ClassSerializerInterceptor)
 @Controller('notification')
 export class NotificationController {
-  constructor(private readonly notificationService: NotificationService) {}
+  constructor(
+    private readonly notificationService: NotificationService,
+    private readonly notificationSseService: NotificationSseService,
+  ) {}
 
   @UseGuards(JwtGuard)
   @Post('setting/:menuId')
@@ -57,5 +62,18 @@ export class NotificationController {
   @Patch('read-all')
   readAllNotifications(@User('sub') userId: number) {
     return this.notificationService.readAllNotifications(userId);
+  }
+
+  @UseGuards(JwtGuard)
+  @Get('stream')
+  @Sse()
+  stream(@User('sub') userId: number) {
+    const subject = this.notificationSseService.connect(userId);
+
+    subject.subscribe({
+      complete: () => this.notificationSseService.disconnect(userId),
+    });
+
+    return subject.asObservable();
   }
 }

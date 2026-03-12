@@ -11,10 +11,13 @@ import { RecallModel } from 'src/recall/entity/recall.entity';
 import { NotificationModel } from './entity/notification.entity';
 import { HIDDEN_MENU_IDS, RELATED_MENU_IDS } from './const/RELATED_MENU_IDS';
 import { NotificationPaginateDto } from './dto/notificationPaginate.dto';
+import { NotificationSseService } from './notification-sse.service';
+import { UserModel } from 'src/auth/entity/user.entity';
 
 @Injectable()
 export class NotificationService {
   constructor(
+    private readonly notificationSseService: NotificationSseService,
     @InjectRepository(NotificationSettingModel)
     private readonly settingRepository: Repository<NotificationSettingModel>,
     @InjectRepository(NotificationModel)
@@ -83,27 +86,49 @@ export class NotificationService {
   }
 
   async sendNotifications(newProducts: Partial<RecallModel>[]) {
+    const sseMap = new Map<
+      number,
+      {
+        user: UserModel;
+        items: { menuName: string; product: Partial<RecallModel> }[];
+      }
+    >();
+
     for (const product of newProducts) {
       const settings = await this.settingRepository.find({
-        where: {
-          menu: { id: product.cntntsId },
-          isActive: true,
-        },
+        where: { menu: { id: product.cntntsId }, isActive: true },
         relations: ['user', 'menu'],
       });
 
       if (settings.length === 0) continue;
 
-      const notifications = settings.map((setting) =>
-        this.notificationRepository.create({
-          user: setting.user,
-          title: `[${setting.menu.name}] 새로운 리콜 제품`,
-          body: product.productNm,
-          recall: { recallSn: product.recallSn },
-        }),
-      );
+      for (const setting of settings) {
+        await this.notificationRepository.save(
+          this.notificationRepository.create({
+            user: { id: setting.user.id },
+            title: `[${setting.menu.name}] 새로운 리콜 제품`,
+            body: product.productNm,
+            recall: { recallSn: product.recallSn },
+          }),
+        );
 
-      await this.notificationRepository.save(notifications);
+        const userId = setting.user.id;
+        if (!sseMap.has(userId)) {
+          sseMap.set(userId, { user: setting.user, items: [] });
+        }
+        sseMap.get(userId)!.items.push({
+          menuName: setting.menu.name,
+          product,
+        });
+      }
+    }
+
+    for (const { user, items } of sseMap.values()) {
+      const count = items.length;
+
+      this.notificationSseService.send(user.id, {
+        title: `구독하신 카테고리에 새로운 리콜 제품 ${count}건이 등록되었습니다`,
+      });
     }
   }
 

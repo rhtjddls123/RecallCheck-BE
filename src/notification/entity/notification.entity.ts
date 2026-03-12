@@ -14,7 +14,9 @@ export class NotificationModel extends BaseModel {
   @Column()
   body: string;
 
-  @ManyToOne(() => RecallModel, (recalls) => recalls.notifications)
+  @ManyToOne(() => RecallModel, (recalls) => recalls.notifications, {
+    onDelete: 'SET NULL',
+  })
   recall: RecallModel;
 
   @Column({ default: false })
