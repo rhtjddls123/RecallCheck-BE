@@ -7,9 +7,11 @@ import {
   Index,
   ManyToOne,
   JoinColumn,
+  OneToMany,
 } from 'typeorm';
 import { RecallMenuModel } from './recall-menu.entity';
 import { Exclude } from 'class-transformer';
+import { NotificationModel } from 'src/notification/entity/notification.entity';
 
 @Entity()
 export class RecallModel {
@@ -140,4 +142,7 @@ export class RecallModel {
   @ManyToOne(() => RecallMenuModel, (menu) => menu.recalls)
   @JoinColumn({ name: 'cntntsId' })
   menu: RecallMenuModel;
+
+  @OneToMany(() => NotificationModel, (noti) => noti.recall)
+  notifications: NotificationModel[];
 }

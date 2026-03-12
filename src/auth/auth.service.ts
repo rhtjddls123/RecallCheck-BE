@@ -95,7 +95,7 @@ export class AuthService {
 
     try {
       payload = this.verifyToken(refreshToken);
-    } catch (e) {
+    } catch {
       throw new UnauthorizedException('유효하지 않은 토큰입니다');
     }
 

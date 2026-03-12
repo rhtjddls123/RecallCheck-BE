@@ -10,6 +10,7 @@ import { SafetyInfoModule } from './safety-info/safety-info.module';
 import { OpenaiModule } from './openai/openai.module';
 import { AuthModule } from './auth/auth.module';
 import { CommonModule } from './common/common.module';
+import { NotificationModule } from './notification/notification.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { CommonModule } from './common/common.module';
     OpenaiModule,
     AuthModule,
     CommonModule,
+    NotificationModule,
   ],
   controllers: [AppController],
   providers: [AppService],
