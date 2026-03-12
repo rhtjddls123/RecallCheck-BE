@@ -4,7 +4,7 @@ import { RecallMenuModel } from 'src/recall/entity/recall-menu.entity';
 import { Column, Entity, ManyToOne, Unique } from 'typeorm';
 
 @Entity()
-@Unique(['userId', 'menuId'])
+@Unique(['user', 'menu'])
 export class NotificationSettingModel extends BaseModel {
   @ManyToOne(() => UserModel, (user) => user.notificationSettings)
   user: UserModel;
