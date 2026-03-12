@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -13,6 +14,8 @@ import { HIDDEN_MENU_IDS, RELATED_MENU_IDS } from './const/RELATED_MENU_IDS';
 import { NotificationPaginateDto } from './dto/notificationPaginate.dto';
 import { NotificationSseService } from './notification-sse.service';
 import { UserModel } from 'src/auth/entity/user.entity';
+import { FcmSubscriptionModel } from './entity/fcm-subscription.entity';
+import { Messaging } from 'firebase-admin/messaging';
 
 @Injectable()
 export class NotificationService {
@@ -24,6 +27,10 @@ export class NotificationService {
     private readonly notificationRepository: Repository<NotificationModel>,
     @InjectRepository(RecallMenuModel)
     private readonly menuRepository: Repository<RecallMenuModel>,
+    @InjectRepository(FcmSubscriptionModel)
+    private readonly fcmRepository: Repository<FcmSubscriptionModel>,
+    @Inject('FIREBASE_ADMIN')
+    private readonly messaging: Messaging,
   ) {}
 
   private async validateMenu(menuId: string) {
@@ -125,10 +132,13 @@ export class NotificationService {
 
     for (const { user, items } of sseMap.values()) {
       const count = items.length;
+      const title = `구독하신 카테고리에 새로운 리콜 제품 ${count}건이 등록되었습니다`;
+      const body = items
+        .map((i) => `[${i.menuName}] ${i.product.productNm}`)
+        .join(', ');
 
-      this.notificationSseService.send(user.id, {
-        title: `구독하신 카테고리에 새로운 리콜 제품 ${count}건이 등록되었습니다`,
-      });
+      this.notificationSseService.send(user.id, { title, body });
+      await this.sendFcmPush(user.id, title, body);
     }
   }
 
@@ -201,5 +211,52 @@ export class NotificationService {
       { isRead: true },
     );
     return { message: '전체 읽음 처리되었습니다' };
+  }
+
+  async saveFcmToken(userId: number, token: string) {
+    const existing = await this.fcmRepository.findOne({
+      where: { fcmToken: token },
+    });
+
+    if (existing) return { message: '이미 등록되어있는 FCM 토큰입니다.' };
+
+    await this.fcmRepository.save({
+      user: { id: userId },
+      fcmToken: token,
+      platform: 'web',
+    });
+
+    return { message: 'FCM 토큰이 등록되었습니다' };
+  }
+
+  async deleteFcmToken(userId: number, token: string) {
+    await this.fcmRepository.delete({
+      user: { id: userId },
+      fcmToken: token,
+    });
+
+    return { message: 'FCM 토큰이 삭제되었습니다' };
+  }
+
+  private async sendFcmPush(userId: number, title: string, body: string) {
+    const subscriptions = await this.fcmRepository.find({
+      where: { user: { id: userId } },
+    });
+
+    if (subscriptions.length === 0) return;
+
+    const messages = subscriptions.map((sub) => ({
+      token: sub.fcmToken,
+      notification: { title, body },
+      webpush: {
+        notification: {
+          title,
+          body,
+          icon: '/icon.png',
+        },
+      },
+    }));
+
+    await this.messaging.sendEach(messages);
   }
 }

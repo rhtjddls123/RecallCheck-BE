@@ -1,4 +1,5 @@
 import {
+  Body,
   ClassSerializerInterceptor,
   Controller,
   Delete,
@@ -16,6 +17,7 @@ import { User } from 'src/auth/decorator/user.decorator';
 import { JwtGuard } from 'src/auth/guard/jwt.guard';
 import { NotificationPaginateDto } from './dto/notificationPaginate.dto';
 import { NotificationSseService } from './notification-sse.service';
+import { SaveFcmTokenDto } from './dto/save-fcm-token.dto';
 
 @UseInterceptors(ClassSerializerInterceptor)
 @Controller('notification')
@@ -75,5 +77,17 @@ export class NotificationController {
     });
 
     return subject.asObservable();
+  }
+
+  @UseGuards(JwtGuard)
+  @Post('fcm-token')
+  saveFcmToken(@User('sub') userId: number, @Body() dto: SaveFcmTokenDto) {
+    return this.notificationService.saveFcmToken(userId, dto.token);
+  }
+
+  @UseGuards(JwtGuard)
+  @Delete('fcm-token')
+  deleteFcmToken(@User('sub') userId: number, @Body() dto: SaveFcmTokenDto) {
+    return this.notificationService.deleteFcmToken(userId, dto.token);
   }
 }
