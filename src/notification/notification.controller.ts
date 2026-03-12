@@ -1,15 +1,21 @@
 import {
+  ClassSerializerInterceptor,
   Controller,
   Delete,
   Get,
   Param,
+  Patch,
   Post,
+  Query,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
 import { NotificationService } from './notification.service';
 import { User } from 'src/auth/decorator/user.decorator';
 import { JwtGuard } from 'src/auth/guard/jwt.guard';
+import { NotificationPaginateDto } from './dto/notificationPaginate.dto';
 
+@UseInterceptors(ClassSerializerInterceptor)
 @Controller('notification')
 export class NotificationController {
   constructor(private readonly notificationService: NotificationService) {}
@@ -30,5 +36,26 @@ export class NotificationController {
   @Get('setting')
   getSettings(@User('sub') userId: number) {
     return this.notificationService.getSettings(userId);
+  }
+
+  @UseGuards(JwtGuard)
+  @Get()
+  getNotifications(
+    @Query() body: NotificationPaginateDto,
+    @User('sub') userId: number,
+  ) {
+    return this.notificationService.getNotifications(body, userId);
+  }
+
+  @UseGuards(JwtGuard)
+  @Patch(':id/read')
+  readNotification(@Param('id') id: number, @User('sub') userId: number) {
+    return this.notificationService.readNotification(id, userId);
+  }
+
+  @UseGuards(JwtGuard)
+  @Patch('read-all')
+  readAllNotifications(@User('sub') userId: number) {
+    return this.notificationService.readAllNotifications(userId);
   }
 }

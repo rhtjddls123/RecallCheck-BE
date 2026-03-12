@@ -1,11 +1,16 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { NotificationSettingModel } from './entity/notification-setting.entity';
-import { Repository } from 'typeorm';
+import { FindOptionsWhere, LessThan, Repository } from 'typeorm';
 import { RecallMenuModel } from 'src/recall/entity/recall-menu.entity';
 import { RecallModel } from 'src/recall/entity/recall.entity';
 import { NotificationModel } from './entity/notification.entity';
 import { HIDDEN_MENU_IDS, RELATED_MENU_IDS } from './const/RELATED_MENU_IDS';
+import { NotificationPaginateDto } from './dto/notificationPaginate.dto';
 
 @Injectable()
 export class NotificationService {
@@ -100,5 +105,76 @@ export class NotificationService {
 
       await this.notificationRepository.save(notifications);
     }
+  }
+
+  async getNotifications(dto: NotificationPaginateDto, userId: number) {
+    const where: FindOptionsWhere<NotificationModel> = {
+      user: { id: userId },
+    };
+
+    if (dto.cursorId) {
+      where.id = LessThan(dto.cursorId);
+    }
+
+    const notifications = await this.notificationRepository.find({
+      where,
+      relations: { recall: true },
+      order: { id: 'DESC' },
+      take: dto.take + 1,
+    });
+
+    const hasNextPage = notifications.length > dto.take;
+    const data = hasNextPage ? notifications.slice(0, dto.take) : notifications;
+
+    const lastItem = hasNextPage ? data[data.length - 1] : null;
+
+    const baseUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
+
+    const nextUrl = lastItem && new URL(`${baseUrl}/notification`);
+
+    if (nextUrl && hasNextPage) {
+      nextUrl.searchParams.append('cursorId', String(lastItem.id));
+
+      for (const key of Object.keys(dto) as (keyof NotificationPaginateDto)[]) {
+        const value = dto[key];
+        if (value === undefined || value === null) continue;
+        if (key !== 'cursorId') {
+          nextUrl.searchParams.append(key, value.toString());
+        }
+      }
+    }
+
+    return {
+      data,
+      count: data.length,
+      cursorId: lastItem?.id ?? null,
+      hasNextPage,
+      next: nextUrl?.toString() ?? null,
+    };
+  }
+
+  async readNotification(id: number, userId: number) {
+    const notification = await this.notificationRepository.findOne({
+      where: { id, user: { id: userId } },
+    });
+
+    if (!notification) {
+      throw new NotFoundException('알림이 존재하지 않습니다');
+    }
+
+    if (notification.isRead) {
+      return { message: '이미 읽은 알림입니다' };
+    }
+
+    await this.notificationRepository.update(id, { isRead: true });
+    return { message: '읽음 처리되었습니다' };
+  }
+
+  async readAllNotifications(userId: number) {
+    await this.notificationRepository.update(
+      { user: { id: userId }, isRead: false },
+      { isRead: true },
+    );
+    return { message: '전체 읽음 처리되었습니다' };
   }
 }
