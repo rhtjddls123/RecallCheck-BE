@@ -16,6 +16,7 @@ import { NotificationSseService } from './notification-sse.service';
 import { UserModel } from 'src/auth/entity/user.entity';
 import { FcmSubscriptionModel } from './entity/fcm-subscription.entity';
 import { Messaging } from 'firebase-admin/messaging';
+import { SetQuietTimeDto } from 'src/auth/dto/set-quiet-time.dto';
 
 @Injectable()
 export class NotificationService {
@@ -31,6 +32,8 @@ export class NotificationService {
     private readonly fcmRepository: Repository<FcmSubscriptionModel>,
     @Inject('FIREBASE_ADMIN')
     private readonly messaging: Messaging,
+    @InjectRepository(UserModel)
+    private readonly userRepository: Repository<UserModel>,
   ) {}
 
   private async validateMenu(menuId: string) {
@@ -205,6 +208,19 @@ export class NotificationService {
     return { message: '읽음 처리되었습니다' };
   }
 
+  async deleteNotification(id: number, userId: number) {
+    const notification = await this.notificationRepository.findOne({
+      where: { id, user: { id: userId } },
+    });
+
+    if (!notification) {
+      throw new NotFoundException('알림이 존재하지 않습니다');
+    }
+
+    await this.notificationRepository.delete(id);
+    return { message: '삭제되었습니다' };
+  }
+
   async readAllNotifications(userId: number) {
     await this.notificationRepository.update(
       { user: { id: userId }, isRead: false },
@@ -238,12 +254,39 @@ export class NotificationService {
     return { message: 'FCM 토큰이 삭제되었습니다' };
   }
 
+  private isQuietTime(
+    quietStart: string | null,
+    quietEnd: string | null,
+  ): boolean {
+    if (!quietStart || !quietEnd) return false;
+
+    const now = new Date();
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+    const [startHour, startMin] = quietStart.split(':').map(Number);
+    const [endHour, endMin] = quietEnd.split(':').map(Number);
+
+    const startMinutes = startHour * 60 + startMin;
+    const endMinutes = endHour * 60 + endMin;
+
+    if (startMinutes > endMinutes) {
+      return currentMinutes >= startMinutes || currentMinutes < endMinutes;
+    }
+
+    return currentMinutes >= startMinutes && currentMinutes < endMinutes;
+  }
+
   private async sendFcmPush(userId: number, title: string, body: string) {
     const subscriptions = await this.fcmRepository.find({
       where: { user: { id: userId } },
+      relations: { user: true },
     });
 
     if (subscriptions.length === 0) return;
+
+    const user = subscriptions[0].user;
+
+    if (this.isQuietTime(user.quietStart, user.quietEnd)) return;
 
     const messages = subscriptions.map((sub) => ({
       token: sub.fcmToken,
@@ -258,5 +301,34 @@ export class NotificationService {
     }));
 
     await this.messaging.sendEach(messages);
+  }
+
+  async checkFcmToken(userId: number, token: string) {
+    const exists = await this.fcmRepository.exists({
+      where: {
+        user: { id: userId },
+        fcmToken: token,
+      },
+    });
+    return { exists };
+  }
+
+  async setQuietTime(userId: number, dto: SetQuietTimeDto) {
+    await this.userRepository.update(userId, {
+      quietStart: dto.quietStart,
+      quietEnd: dto.quietEnd,
+    });
+    return { message: '방해금지 시간이 설정되었습니다' };
+  }
+
+  async getQuietTime(userId: number) {
+    const user = await this.userRepository.findOne({
+      where: { id: userId },
+      select: { id: true, quietStart: true, quietEnd: true },
+    });
+
+    if (!user) throw new NotFoundException('유저 정보를 찾을 수 없습니다.');
+
+    return { quietStart: user.quietStart, quietEnd: user.quietEnd };
   }
 }

@@ -114,7 +114,7 @@ export class AuthController {
   @UseGuards(JwtGuard)
   @Get('me')
   async getMe(@User('sub') userId: number) {
-    return await this.userService.getUserById(userId);
+    return await this.userService.getUserInfoById(userId);
   }
 
   @UseGuards(JwtGuard)

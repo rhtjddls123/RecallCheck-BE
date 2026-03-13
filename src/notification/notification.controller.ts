@@ -18,6 +18,7 @@ import { JwtGuard } from 'src/auth/guard/jwt.guard';
 import { NotificationPaginateDto } from './dto/notificationPaginate.dto';
 import { NotificationSseService } from './notification-sse.service';
 import { SaveFcmTokenDto } from './dto/save-fcm-token.dto';
+import { SetQuietTimeDto } from 'src/auth/dto/set-quiet-time.dto';
 
 @UseInterceptors(ClassSerializerInterceptor)
 @Controller('notification')
@@ -89,5 +90,29 @@ export class NotificationController {
   @Delete('fcm-token')
   deleteFcmToken(@User('sub') userId: number, @Body() dto: SaveFcmTokenDto) {
     return this.notificationService.deleteFcmToken(userId, dto.token);
+  }
+
+  @UseGuards(JwtGuard)
+  @Delete(':id')
+  deleteNotification(@Param('id') id: number, @User('sub') userId: number) {
+    return this.notificationService.deleteNotification(id, userId);
+  }
+
+  @UseGuards(JwtGuard)
+  @Get('fcm-token/check')
+  checkFcmToken(@User('sub') userId: number, @Query('token') token: string) {
+    return this.notificationService.checkFcmToken(userId, token);
+  }
+
+  @UseGuards(JwtGuard)
+  @Patch('quiet-time')
+  setQuietTime(@User('sub') userId: number, @Body() dto: SetQuietTimeDto) {
+    return this.notificationService.setQuietTime(userId, dto);
+  }
+
+  @UseGuards(JwtGuard)
+  @Get('quiet-time')
+  getQuietTime(@User('sub') userId: number) {
+    return this.notificationService.getQuietTime(userId);
   }
 }

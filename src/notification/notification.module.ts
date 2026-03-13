@@ -9,6 +9,7 @@ import { AuthModule } from 'src/auth/auth.module';
 import { RecallMenuModel } from 'src/recall/entity/recall-menu.entity';
 import { RecallModule } from 'src/recall/recall.module';
 import { NotificationSseService } from './notification-sse.service';
+import { UserModel } from 'src/auth/entity/user.entity';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { NotificationSseService } from './notification-sse.service';
       NotificationModel,
       FcmSubscriptionModel,
       RecallMenuModel,
+      UserModel,
     ]),
     AuthModule,
     RecallModule,

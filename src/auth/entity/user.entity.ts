@@ -28,6 +28,12 @@ export class UserModel extends BaseModel {
   @Column({ type: 'text', nullable: true })
   refreshToken: string | null;
 
+  @Column({ type: 'text', nullable: true })
+  quietStart: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  quietEnd: string | null;
+
   @OneToMany(() => UserLogModel, (logs) => logs.user)
   logs: UserLogModel[];
 
