@@ -272,4 +272,14 @@ export class NotificationService {
 
     await this.messaging.sendEach(messages);
   }
+
+  async checkFcmToken(userId: number, token: string) {
+    const exists = await this.fcmRepository.exists({
+      where: {
+        user: { id: userId },
+        fcmToken: token,
+      },
+    });
+    return { exists };
+  }
 }

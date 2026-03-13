@@ -61,12 +61,6 @@ export class NotificationController {
   }
 
   @UseGuards(JwtGuard)
-  @Delete(':id')
-  deleteNotification(@Param('id') id: number, @User('sub') userId: number) {
-    return this.notificationService.deleteNotification(id, userId);
-  }
-
-  @UseGuards(JwtGuard)
   @Patch('read-all')
   readAllNotifications(@User('sub') userId: number) {
     return this.notificationService.readAllNotifications(userId);
@@ -95,5 +89,17 @@ export class NotificationController {
   @Delete('fcm-token')
   deleteFcmToken(@User('sub') userId: number, @Body() dto: SaveFcmTokenDto) {
     return this.notificationService.deleteFcmToken(userId, dto.token);
+  }
+
+  @UseGuards(JwtGuard)
+  @Delete(':id')
+  deleteNotification(@Param('id') id: number, @User('sub') userId: number) {
+    return this.notificationService.deleteNotification(id, userId);
+  }
+
+  @UseGuards(JwtGuard)
+  @Get('fcm-token/check')
+  checkFcmToken(@User('sub') userId: number, @Query('token') token: string) {
+    return this.notificationService.checkFcmToken(userId, token);
   }
 }
