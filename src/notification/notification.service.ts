@@ -205,6 +205,19 @@ export class NotificationService {
     return { message: '읽음 처리되었습니다' };
   }
 
+  async deleteNotification(id: number, userId: number) {
+    const notification = await this.notificationRepository.findOne({
+      where: { id, user: { id: userId } },
+    });
+
+    if (!notification) {
+      throw new NotFoundException('알림이 존재하지 않습니다');
+    }
+
+    await this.notificationRepository.delete(id);
+    return { message: '삭제되었습니다' };
+  }
+
   async readAllNotifications(userId: number) {
     await this.notificationRepository.update(
       { user: { id: userId }, isRead: false },

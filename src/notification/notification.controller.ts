@@ -61,6 +61,12 @@ export class NotificationController {
   }
 
   @UseGuards(JwtGuard)
+  @Delete(':id')
+  deleteNotification(@Param('id') id: number, @User('sub') userId: number) {
+    return this.notificationService.deleteNotification(id, userId);
+  }
+
+  @UseGuards(JwtGuard)
   @Patch('read-all')
   readAllNotifications(@User('sub') userId: number) {
     return this.notificationService.readAllNotifications(userId);
