@@ -5,6 +5,7 @@ import { FindOptionsWhere, LessThan, Repository } from 'typeorm';
 import { LogTypeEnum } from './const/log-type.const';
 import { UserLogModel } from './entity/user-log.entity';
 import { ActivityPaginateDto } from './dto/activity-paginate.dto';
+import { NotificationModel } from 'src/notification/entity/notification.entity';
 
 @Injectable()
 export class UserService {
@@ -13,7 +14,28 @@ export class UserService {
     private readonly userRepository: Repository<UserModel>,
     @InjectRepository(UserLogModel)
     private readonly userLogRepository: Repository<UserLogModel>,
+    @InjectRepository(NotificationModel)
+    private readonly notificationRepository: Repository<NotificationModel>,
   ) {}
+
+  async getUserInfoById(id: number) {
+    const me = await this.userRepository.findOne({
+      where: { id },
+      select: {
+        id: true,
+        kakaoId: true,
+        nickname: true,
+        profileImage: true,
+        role: true,
+      },
+    });
+
+    const unreadCount = await this.notificationRepository.count({
+      where: { user: { id }, isRead: false },
+    });
+
+    return { ...me, unreadCount };
+  }
 
   async getUserById(id: number) {
     return await this.userRepository.findOne({ where: { id } });
