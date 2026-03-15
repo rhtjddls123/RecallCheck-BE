@@ -10,13 +10,17 @@ import { Consumer24Mapper } from './consumer24.mapper';
 import { RecallModel } from 'src/recall/entity/recall.entity';
 import { RecallModule } from 'src/recall/recall.module';
 import { NotificationModule } from 'src/notification/notification.module';
+import { RecallNewsModel } from './entity/recall-news.entity';
+import { RecallNewsCrawler } from './recall-news.crawler';
+import { AuthModule } from 'src/auth/auth.module';
 
 @Module({
   imports: [
     HttpModule,
     RecallModule,
     NotificationModule,
-    TypeOrmModule.forFeature([SafetyInfoModel, RecallModel]),
+    AuthModule,
+    TypeOrmModule.forFeature([SafetyInfoModel, RecallModel, RecallNewsModel]),
   ],
   controllers: [Consumer24Controller],
   providers: [
@@ -24,6 +28,7 @@ import { NotificationModule } from 'src/notification/notification.module';
     Consumer24Client,
     Consumer24Scheduler,
     Consumer24Mapper,
+    RecallNewsCrawler,
   ],
 })
 export class Consumer24Module {}
