@@ -9,6 +9,8 @@ import { SafetyInfoModel } from 'src/safety-info/entity/safetyInfo.entity';
 import { Consumer24Mapper } from './consumer24.mapper';
 import { Repository } from 'typeorm';
 import { RecallModel } from 'src/recall/entity/recall.entity';
+import { RecallNewsModel } from './entity/recall-news.entity';
+import { RecallNewsItem } from './recall-news.crawler';
 
 @Injectable()
 export class Consumer24Service implements OnModuleInit {
@@ -19,6 +21,8 @@ export class Consumer24Service implements OnModuleInit {
     private readonly safetyInfoRepository: Repository<SafetyInfoModel>,
     @InjectRepository(RecallModel)
     private readonly recallRepository: Repository<RecallModel>,
+    @InjectRepository(RecallNewsModel)
+    private readonly repo: Repository<RecallNewsModel>,
   ) {}
 
   async onModuleInit() {
@@ -171,5 +175,18 @@ export class Consumer24Service implements OnModuleInit {
     }
 
     return true;
+  }
+
+  async upsertRecallNews(items: RecallNewsItem[]) {
+    for (const item of items) {
+      await this.repo.upsert({ ...item }, { conflictPaths: ['linkUrl'] });
+    }
+  }
+
+  async getRecallNews(take = 5) {
+    return this.repo.find({
+      order: { date: 'DESC' },
+      take,
+    });
   }
 }

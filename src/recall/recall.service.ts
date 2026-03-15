@@ -41,6 +41,12 @@ export class RecallService {
     private readonly userService: UserService,
   ) {}
 
+  async getAllIds() {
+    return this.recallRepository.find({
+      select: ['recallSn'],
+    });
+  }
+
   async findRecallDetail(recallSn: string, userId?: number) {
     const item = await this.recallRepository.findOne({ where: { recallSn } });
 

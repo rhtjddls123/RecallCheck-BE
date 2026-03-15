@@ -33,6 +33,11 @@ export class RecallController {
     private readonly recallRepository: Repository<RecallModel>,
   ) {}
 
+  @Get('sitemap')
+  async getSitemapIds() {
+    return await this.recallService.getAllIds();
+  }
+
   @Get('recent')
   async getRecentRecall(
     @Query('take', new DefaultValuePipe(5), ParseIntPipe) take: number,
