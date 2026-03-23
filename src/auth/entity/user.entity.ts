@@ -6,6 +6,7 @@ import { RolesEnum } from '../const/roles.const';
 import { NotificationSettingModel } from 'src/notification/entity/notification-setting.entity';
 import { NotificationModel } from 'src/notification/entity/notification.entity';
 import { FcmSubscriptionModel } from 'src/notification/entity/fcm-subscription.entity';
+import { UserKeywordModel } from 'src/notification/entity/user-keyword.entity';
 
 @Entity()
 export class UserModel extends BaseModel {
@@ -28,6 +29,10 @@ export class UserModel extends BaseModel {
   @Column({ type: 'text', nullable: true })
   refreshToken: string | null;
 
+  @Exclude()
+  @Column({ type: 'text', nullable: true })
+  appRefreshToken: string | null;
+
   @Column({ type: 'text', nullable: true })
   quietStart: string | null;
 
@@ -45,4 +50,7 @@ export class UserModel extends BaseModel {
 
   @OneToMany(() => FcmSubscriptionModel, (fcm) => fcm.user)
   fcmSubscriptions: FcmSubscriptionModel[];
+
+  @OneToMany(() => UserKeywordModel, (keyword) => keyword.user)
+  keywords: UserKeywordModel[];
 }

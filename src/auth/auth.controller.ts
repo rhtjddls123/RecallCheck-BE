@@ -89,9 +89,10 @@ export class AuthController {
       (req.body as { refreshToken: string })['refreshToken']) as string;
 
     if (refreshToken) {
+      const isWeb = !!req.cookies['refreshToken'];
       try {
         const payload = this.authService.verifyToken(refreshToken);
-        await this.authService.logout(payload.sub);
+        await this.authService.logout(payload.sub, isWeb ? 'web' : 'app');
       } catch {
         // 토큰 만료돼도 쿠키는 제거
       }
@@ -141,7 +142,7 @@ export class AuthController {
     const refreshToken = (req.body as { refreshToken: string })['refreshToken'];
 
     const { accessToken, refreshToken: newRefreshToken } =
-      await this.authService.refresh(refreshToken);
+      await this.authService.refresh(refreshToken, 'app');
 
     return { success: true, accessToken, refreshToken: newRefreshToken };
   }

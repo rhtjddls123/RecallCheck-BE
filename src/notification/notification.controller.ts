@@ -19,6 +19,7 @@ import { NotificationPaginateDto } from './dto/notificationPaginate.dto';
 import { NotificationSseService } from './notification-sse.service';
 import { SaveFcmTokenDto } from './dto/save-fcm-token.dto';
 import { SetQuietTimeDto } from 'src/auth/dto/set-quiet-time.dto';
+import { CreateKeywordDto } from './dto/create-keyword.dto';
 
 @UseInterceptors(ClassSerializerInterceptor)
 @Controller('notification')
@@ -27,6 +28,24 @@ export class NotificationController {
     private readonly notificationService: NotificationService,
     private readonly notificationSseService: NotificationSseService,
   ) {}
+
+  @UseGuards(JwtGuard)
+  @Get('keyword')
+  getKeywords(@User('sub') userId: number) {
+    return this.notificationService.getKeywords(userId);
+  }
+
+  @UseGuards(JwtGuard)
+  @Post('keyword')
+  addKeyword(@User('sub') userId: number, @Body() dto: CreateKeywordDto) {
+    return this.notificationService.addKeyword(userId, dto.keyword);
+  }
+
+  @UseGuards(JwtGuard)
+  @Delete('keyword/:id')
+  deleteKeyword(@User('sub') userId: number, @Param('id') id: number) {
+    return this.notificationService.deleteKeyword(userId, +id);
+  }
 
   @UseGuards(JwtGuard)
   @Post('setting/:menuId')
