@@ -4,7 +4,9 @@ import { Column, Entity, ManyToOne } from 'typeorm';
 
 @Entity()
 export class FcmSubscriptionModel extends BaseModel {
-  @ManyToOne(() => UserModel, (user) => user.fcmSubscriptions)
+  @ManyToOne(() => UserModel, (user) => user.fcmSubscriptions, {
+    onDelete: 'CASCADE',
+  })
   user: UserModel;
 
   @Column({ unique: true })
