@@ -31,6 +31,31 @@ export class AuthController {
   private domain =
     process.env.NODE_ENV === 'production' ? '.recall-check.site' : undefined;
 
+  // 앱용 카카오 로그인 시작 - WebView로 이 URL을 열어요
+  @Get('kakao/app')
+  kakaoAppLoginStart(@Res() res: Response) {
+    const kakaoAuthUrl = `https://kauth.kakao.com/oauth/authorize?client_id=${process.env.KAKAO_CLIENT_ID}&redirect_uri=${process.env.KAKAO_APP_REDIRECT_URI}&response_type=code`;
+    res.redirect(kakaoAuthUrl);
+  }
+
+  // 카카오에서 code 받아서 토큰 발급 후 앱 딥링크로 리다이렉트
+  @Get('kakao/app/callback')
+  async kakaoAppCallback(@Query('code') code: string, @Res() res: Response) {
+    try {
+      const { accessToken, refreshToken } = await this.authService.kakaoLogin(
+        code,
+        'app',
+      );
+
+      // 앱 딥링크로 토큰 전달
+      const deepLink = `recall-check-app://auth?accessToken=${accessToken}&refreshToken=${refreshToken}`;
+      res.redirect(deepLink);
+    } catch {
+      // 실패 시 에러 딥링크
+      res.redirect(`recall-check-app://auth?error=login_failed`);
+    }
+  }
+
   @Post('kakao')
   async kakaoLogin(
     @Body('code') code: string,
@@ -60,7 +85,8 @@ export class AuthController {
 
   @Post('logout')
   async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
-    const refreshToken = req.cookies['refreshToken'] as string;
+    const refreshToken = (req.cookies['refreshToken'] ||
+      (req.body as { refreshToken: string })['refreshToken']) as string;
 
     if (refreshToken) {
       try {
@@ -108,6 +134,16 @@ export class AuthController {
     });
 
     return { success: true };
+  }
+
+  @Post('refresh/app')
+  async refreshApp(@Req() req: Request) {
+    const refreshToken = (req.body as { refreshToken: string })['refreshToken'];
+
+    const { accessToken, refreshToken: newRefreshToken } =
+      await this.authService.refresh(refreshToken);
+
+    return { success: true, accessToken, refreshToken: newRefreshToken };
   }
 
   @UseInterceptors(ClassSerializerInterceptor)
