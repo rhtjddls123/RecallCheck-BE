@@ -88,12 +88,18 @@ export class AuthService {
 
     const { accessToken, refreshToken } = this.loginUser(user);
 
-    await this.userRepository.update(user.id, { refreshToken });
+    if (type === 'web') {
+      await this.userRepository.update(user.id, { refreshToken });
+    } else if (type === 'app') {
+      await this.userRepository.update(user.id, {
+        appRefreshToken: refreshToken,
+      });
+    }
 
     return { accessToken, refreshToken };
   }
 
-  async refresh(refreshToken: string) {
+  async refresh(refreshToken: string, type: 'web' | 'app' = 'web') {
     let payload: JwtPayload;
 
     try {
@@ -107,7 +113,12 @@ export class AuthService {
     }
 
     const user = await this.userRepository.findOne({
-      where: { id: payload.sub, refreshToken },
+      where: {
+        id: payload.sub,
+        ...(type === 'web'
+          ? { refreshToken }
+          : { appRefreshToken: refreshToken }),
+      },
     });
 
     if (!user) {
@@ -118,14 +129,18 @@ export class AuthService {
     const newRefreshToken = this.signToken(user, true);
 
     await this.userRepository.update(user.id, {
-      refreshToken: newRefreshToken,
+      ...(type === 'web'
+        ? { refreshToken: newRefreshToken }
+        : { appRefreshToken: newRefreshToken }),
     });
 
     return { accessToken: newAccessToken, refreshToken: newRefreshToken };
   }
 
-  async logout(userId: number) {
-    await this.userRepository.update(userId, { refreshToken: null });
+  async logout(userId: number, type: 'web' | 'app' = 'web') {
+    await this.userRepository.update(userId, {
+      ...(type === 'web' ? { refreshToken: null } : { appRefreshToken: null }),
+    });
   }
 
   async deleteUser(userId: number) {

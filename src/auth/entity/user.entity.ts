@@ -28,6 +28,10 @@ export class UserModel extends BaseModel {
   @Column({ type: 'text', nullable: true })
   refreshToken: string | null;
 
+  @Exclude()
+  @Column({ type: 'text', nullable: true })
+  appRefreshToken: string | null;
+
   @Column({ type: 'text', nullable: true })
   quietStart: string | null;
 
