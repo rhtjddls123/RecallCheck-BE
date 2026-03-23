@@ -62,7 +62,7 @@ export class RecallService {
         productNm: item.productNm,
         makr: item.makr || item.bsnmNm,
         imageUrl: item.recallImgUrls?.[0],
-        targetUrl: `${process.env.FRONTEND_URL}/recall/${recallSn}`,
+        targetUrl: `/recall/${recallSn}`,
       });
     }
     return item;
@@ -214,7 +214,7 @@ export class RecallService {
       count: countResult.count,
       targetUrl:
         countResult.count > 0
-          ? `${process.env.FRONTEND_URL}/recall/chatbot-search?query=${encodeURIComponent(query)}${categoryId ? `&category=${categoryId}` : ''}&page=1`
+          ? `/recall/chatbot-search?query=${encodeURIComponent(query)}${categoryId ? `&category=${categoryId}` : ''}&page=1`
           : null,
     };
   }
@@ -629,7 +629,7 @@ export class RecallService {
       if (user)
         await this.userService.addUserLog(user, LogTypeEnum.SEARCH, {
           keyword: dto.query,
-          targetUrl: `${process.env.FRONTEND_URL}${this.buildTargetUrl(dto)}`,
+          targetUrl: this.buildTargetUrl(dto),
         });
 
       const [countResult, searchResult] = await Promise.all([
@@ -695,7 +695,7 @@ export class RecallService {
     if (user && dto.query)
       await this.userService.addUserLog(user, LogTypeEnum.SEARCH, {
         keyword: dto.query,
-        targetUrl: `${process.env.FRONTEND_URL}${this.buildTargetUrl(dto)}`,
+        targetUrl: this.buildTargetUrl(dto),
       });
 
     const buildWhere = (): FindOptionsWhere<RecallModel>[] => {
