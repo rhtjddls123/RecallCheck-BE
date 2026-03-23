@@ -229,7 +229,7 @@ export class NotificationService {
     return { message: '전체 읽음 처리되었습니다' };
   }
 
-  async saveFcmToken(userId: number, token: string) {
+  async saveFcmToken(userId: number, token: string, platform: 'web' | 'app') {
     const existing = await this.fcmRepository.findOne({
       where: { fcmToken: token },
     });
@@ -239,7 +239,7 @@ export class NotificationService {
     await this.fcmRepository.save({
       user: { id: userId },
       fcmToken: token,
-      platform: 'web',
+      platform,
     });
 
     return { message: 'FCM 토큰이 등록되었습니다' };
@@ -288,19 +288,40 @@ export class NotificationService {
 
     if (this.isQuietTime(user.quietStart, user.quietEnd)) return;
 
-    const messages = subscriptions.map((sub) => ({
-      token: sub.fcmToken,
-      notification: { title, body },
-      webpush: {
-        notification: {
-          title,
-          body,
-          icon: '/icon.png',
-        },
-      },
-    }));
+    const webSubs = subscriptions.filter((sub) => sub.platform === 'web');
+    const appSubs = subscriptions.filter((sub) => sub.platform === 'app');
 
-    await this.messaging.sendEach(messages);
+    if (webSubs.length > 0) {
+      const messages = webSubs.map((sub) => ({
+        token: sub.fcmToken,
+        notification: { title, body },
+        webpush: {
+          notification: {
+            title,
+            body,
+            icon: '/icon.png',
+          },
+        },
+      }));
+      await this.messaging.sendEach(messages);
+    }
+
+    if (appSubs.length > 0) {
+      const messages = appSubs.map((sub) => ({
+        to: sub.fcmToken,
+        title,
+        body,
+        sound: 'default',
+      }));
+
+      await fetch('https://exp.host/--/api/v2/push/send', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(messages),
+      });
+    }
   }
 
   async checkFcmToken(userId: number, token: string) {
