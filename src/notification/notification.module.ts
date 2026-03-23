@@ -10,6 +10,7 @@ import { RecallMenuModel } from 'src/recall/entity/recall-menu.entity';
 import { RecallModule } from 'src/recall/recall.module';
 import { NotificationSseService } from './notification-sse.service';
 import { UserModel } from 'src/auth/entity/user.entity';
+import { UserKeywordModel } from './entity/user-keyword.entity';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { UserModel } from 'src/auth/entity/user.entity';
       FcmSubscriptionModel,
       RecallMenuModel,
       UserModel,
+      UserKeywordModel,
     ]),
     AuthModule,
     RecallModule,

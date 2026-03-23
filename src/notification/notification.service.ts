@@ -1,12 +1,14 @@
 import {
   BadRequestException,
+  HttpException,
+  HttpStatus,
   Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { NotificationSettingModel } from './entity/notification-setting.entity';
-import { FindOptionsWhere, LessThan, Repository } from 'typeorm';
+import { FindOptionsWhere, LessThan, Raw, Repository } from 'typeorm';
 import { RecallMenuModel } from 'src/recall/entity/recall-menu.entity';
 import { RecallModel } from 'src/recall/entity/recall.entity';
 import { NotificationModel } from './entity/notification.entity';
@@ -17,6 +19,7 @@ import { UserModel } from 'src/auth/entity/user.entity';
 import { FcmSubscriptionModel } from './entity/fcm-subscription.entity';
 import { Messaging } from 'firebase-admin/messaging';
 import { SetQuietTimeDto } from 'src/auth/dto/set-quiet-time.dto';
+import { UserKeywordModel } from './entity/user-keyword.entity';
 
 @Injectable()
 export class NotificationService {
@@ -34,7 +37,48 @@ export class NotificationService {
     private readonly messaging: Messaging,
     @InjectRepository(UserModel)
     private readonly userRepository: Repository<UserModel>,
+    @InjectRepository(UserKeywordModel)
+    private readonly userKeywordRepository: Repository<UserKeywordModel>,
   ) {}
+
+  async getKeywords(userId: number) {
+    return this.userKeywordRepository.find({
+      where: { user: { id: userId } },
+    });
+  }
+
+  async addKeyword(userId: number, keyword: string) {
+    const exists = await this.userKeywordRepository.exists({
+      where: { user: { id: userId }, keyword },
+    });
+
+    if (exists) {
+      throw new HttpException('이미 등록된 키워드입니다.', HttpStatus.CONFLICT);
+    }
+
+    return this.userKeywordRepository.save({
+      user: { id: userId },
+      keyword,
+    });
+  }
+
+  async deleteKeyword(userId: number, keywordId: number) {
+    await this.userKeywordRepository.delete({
+      id: keywordId,
+      user: { id: userId },
+    });
+  }
+
+  async matchKeywords(productNm: string) {
+    return await this.userKeywordRepository
+      .createQueryBuilder('keyword')
+      .leftJoinAndSelect('keyword.user', 'user')
+      .where(
+        "LOWER(:productNm) LIKE LOWER(CONCAT('%', keyword.keyword, '%'))",
+        { productNm },
+      )
+      .getMany();
+  }
 
   private async validateMenu(menuId: string) {
     const menu = await this.menuRepository.findOne({ where: { id: menuId } });
@@ -104,24 +148,45 @@ export class NotificationService {
       }
     >();
 
+    const savedNotifications = new Set<string>();
+
+    const saveNotificationOnce = async (
+      userId: number,
+      title: string,
+      body?: string,
+      recallSn?: string,
+    ) => {
+      const key = `${userId}_${recallSn}`;
+      if (savedNotifications.has(key)) return;
+      savedNotifications.add(key);
+
+      await this.notificationRepository.save(
+        this.notificationRepository.create({
+          user: { id: userId },
+          title,
+          body,
+          recall: { recallSn },
+        }),
+      );
+    };
+
     for (const product of newProducts) {
+      // 카테고리 알림
       const settings = await this.settingRepository.find({
         where: { menu: { id: product.cntntsId }, isActive: true },
         relations: ['user', 'menu'],
       });
 
-      if (settings.length === 0) continue;
-
       for (const setting of settings) {
-        await this.notificationRepository.save(
-          this.notificationRepository.create({
-            user: { id: setting.user.id },
-            title: `[${setting.menu.name}] 새로운 리콜 제품`,
-            body: product.productNm,
-            recall: { recallSn: product.recallSn },
-          }),
+        // 제품마다 유저별로 DB 저장
+        await saveNotificationOnce(
+          setting.user.id,
+          `[${setting.menu.name}] 새로운 리콜 제품`,
+          product.productNm,
+          product.recallSn,
         );
 
+        // sseMap에 유저별로 쌓기
         const userId = setting.user.id;
         if (!sseMap.has(userId)) {
           sseMap.set(userId, { user: setting.user, items: [] });
@@ -131,8 +196,38 @@ export class NotificationService {
           product,
         });
       }
+
+      // 키워드 알림
+      const matchedKeywords = await this.userKeywordRepository.find({
+        where: {
+          keyword: Raw(
+            (alias) =>
+              `LOWER(:productNm) LIKE LOWER(CONCAT('%', ${alias}, '%'))`,
+            { productNm: product.productNm },
+          ),
+        },
+        relations: { user: true },
+      });
+
+      for (const { user, keyword } of matchedKeywords) {
+        // 중복이면 DB 저장 안 함 (카테고리로 이미 저장된 경우)
+        await saveNotificationOnce(
+          user.id,
+          `[키워드 알림] '${keyword}'`,
+          product.productNm,
+          product.recallSn,
+        );
+
+        // FCM은 항상 전송
+        await this.sendFcmPush(
+          user.id,
+          `[키워드 알림] '${keyword}'`,
+          `${product.productNm} 리콜이 등록되었습니다.`,
+        );
+      }
     }
 
+    // 카테고리 FCM + SSE 일괄 전송
     for (const { user, items } of sseMap.values()) {
       const count = items.length;
       const title = `구독하신 카테고리에 새로운 리콜 제품 ${count}건이 등록되었습니다`;
