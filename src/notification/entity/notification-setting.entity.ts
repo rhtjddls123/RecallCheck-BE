@@ -6,7 +6,9 @@ import { Column, Entity, ManyToOne, Unique } from 'typeorm';
 @Entity()
 @Unique(['user', 'menu'])
 export class NotificationSettingModel extends BaseModel {
-  @ManyToOne(() => UserModel, (user) => user.notificationSettings)
+  @ManyToOne(() => UserModel, (user) => user.notificationSettings, {
+    onDelete: 'CASCADE',
+  })
   user: UserModel;
 
   @ManyToOne(() => RecallMenuModel, (menu) => menu.notificationSettings)

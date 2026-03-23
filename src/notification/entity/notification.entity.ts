@@ -5,7 +5,9 @@ import { Column, Entity, ManyToOne } from 'typeorm';
 
 @Entity()
 export class NotificationModel extends BaseModel {
-  @ManyToOne(() => UserModel, (users) => users.notifications)
+  @ManyToOne(() => UserModel, (users) => users.notifications, {
+    onDelete: 'CASCADE',
+  })
   user: UserModel;
 
   @Column()

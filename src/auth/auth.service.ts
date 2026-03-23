@@ -45,7 +45,7 @@ export class AuthService {
     private readonly userRepository: Repository<UserModel>,
   ) {}
 
-  async kakaoLogin(code: string) {
+  async kakaoLogin(code: string, type: 'web' | 'app' = 'web') {
     if (!code) {
       throw new HttpException('code가 없습니다', HttpStatus.BAD_REQUEST);
     }
@@ -56,7 +56,10 @@ export class AuthService {
         grant_type: 'authorization_code',
         client_id: process.env.KAKAO_CLIENT_ID,
         client_secret: process.env.KAKAO_CLIENT_SECRET,
-        redirect_uri: process.env.KAKAO_REDIRECT_URI,
+        redirect_uri:
+          type === 'web'
+            ? process.env.KAKAO_REDIRECT_URI
+            : process.env.KAKAO_APP_REDIRECT_URI,
         code,
       },
       { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } },

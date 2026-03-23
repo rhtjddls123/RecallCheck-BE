@@ -13,7 +13,8 @@ export class JwtGuard implements CanActivate {
 
   canActivate(context: ExecutionContext) {
     const request = context.switchToHttp().getRequest<Request>();
-    const token = request.cookies['accessToken'] as string;
+    const token = (request.cookies['accessToken'] ||
+      request.headers['authorization']?.split(' ')[1]) as string;
 
     if (!token) {
       throw new UnauthorizedException('로그인이 필요합니다');

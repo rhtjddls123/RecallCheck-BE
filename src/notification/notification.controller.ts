@@ -83,7 +83,11 @@ export class NotificationController {
   @UseGuards(JwtGuard)
   @Post('fcm-token')
   saveFcmToken(@User('sub') userId: number, @Body() dto: SaveFcmTokenDto) {
-    return this.notificationService.saveFcmToken(userId, dto.token);
+    return this.notificationService.saveFcmToken(
+      userId,
+      dto.token,
+      dto.platform,
+    );
   }
 
   @UseGuards(JwtGuard)
