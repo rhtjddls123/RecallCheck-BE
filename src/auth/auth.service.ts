@@ -158,18 +158,22 @@ export class AuthService {
       throw new NotFoundException('유저가 존재하지 않습니다');
     }
 
-    await axios.post(
-      'https://kapi.kakao.com/v1/user/unlink',
-      { target_id_type: 'user_id', target_id: user.kakaoId },
-      {
-        headers: {
-          Authorization: `KakaoAK ${process.env.KAKAO_ADMIN_KEY}`,
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-      },
-    );
-
     await this.userRepository.delete(userId);
+
+    try {
+      await axios.post(
+        'https://kapi.kakao.com/v1/user/unlink',
+        { target_id_type: 'user_id', target_id: user.kakaoId },
+        {
+          headers: {
+            Authorization: `KakaoAK ${process.env.KAKAO_ADMIN_KEY}`,
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+        },
+      );
+    } catch (e) {
+      console.error(`Kakao unlink 실패 (kakaoId: ${user.kakaoId})`, e);
+    }
   }
 
   signToken(
