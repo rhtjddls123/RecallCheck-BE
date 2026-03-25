@@ -12,12 +12,17 @@ import {
   Query,
   Param,
   ParseIntPipe,
+  Inject,
+  UnauthorizedException,
 } from '@nestjs/common';
 import type { Response, Request } from 'express';
 import { AuthService } from './auth.service';
 import { JwtGuard } from './guard/jwt.guard';
 import { UserService } from './user.service';
 import { User } from './decorator/user.decorator';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import type { Cache } from 'cache-manager';
+import { randomUUID } from 'crypto';
 import { ActivityPaginateDto } from './dto/activity-paginate.dto';
 import { IsLogMineOrAdminGuard } from './guard/is-log-mine-or-admin.guard';
 
@@ -26,19 +31,18 @@ export class AuthController {
   constructor(
     private readonly authService: AuthService,
     private readonly userService: UserService,
+    @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
   ) {}
 
   private domain =
     process.env.NODE_ENV === 'production' ? '.recall-check.site' : undefined;
 
-  // 앱용 카카오 로그인 시작 - WebView로 이 URL을 열어요
   @Get('kakao/app')
   kakaoAppLoginStart(@Res() res: Response) {
     const kakaoAuthUrl = `https://kauth.kakao.com/oauth/authorize?client_id=${process.env.KAKAO_CLIENT_ID}&redirect_uri=${process.env.KAKAO_APP_REDIRECT_URI}&response_type=code`;
     res.redirect(kakaoAuthUrl);
   }
 
-  // 카카오에서 code 받아서 토큰 발급 후 앱 딥링크로 리다이렉트
   @Get('kakao/app/callback')
   async kakaoAppCallback(@Query('code') code: string, @Res() res: Response) {
     try {
@@ -47,13 +51,32 @@ export class AuthController {
         'app',
       );
 
-      // 앱 딥링크로 토큰 전달
-      const deepLink = `recall-check-app://auth?accessToken=${accessToken}&refreshToken=${refreshToken}`;
-      res.redirect(deepLink);
+      const tempCode = randomUUID();
+      await this.cacheManager.set(
+        tempCode,
+        { accessToken, refreshToken },
+        60000,
+      );
+
+      res.redirect(`recall-check-app://auth?code=${tempCode}`);
     } catch {
-      // 실패 시 에러 딥링크
       res.redirect(`recall-check-app://auth?error=login_failed`);
     }
+  }
+
+  @Post('kakao/app/exchange')
+  async exchangeToken(@Body('code') tempCode: string) {
+    const tokens = await this.cacheManager.get<{
+      accessToken: string;
+      refreshToken: string;
+    }>(tempCode);
+
+    if (!tokens) {
+      throw new UnauthorizedException('유효하지 않거나 만료된 코드입니다');
+    }
+
+    await this.cacheManager.del(tempCode);
+    return tokens;
   }
 
   @Post('kakao')
