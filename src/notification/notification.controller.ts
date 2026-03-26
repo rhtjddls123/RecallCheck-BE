@@ -5,6 +5,7 @@ import {
   Delete,
   Get,
   Param,
+  ParseIntPipe,
   Patch,
   Post,
   Query,
@@ -43,8 +44,11 @@ export class NotificationController {
 
   @UseGuards(JwtGuard)
   @Delete('keyword/:id')
-  deleteKeyword(@User('sub') userId: number, @Param('id') id: number) {
-    return this.notificationService.deleteKeyword(userId, +id);
+  deleteKeyword(
+    @User('sub') userId: number,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.notificationService.deleteKeyword(userId, id);
   }
 
   @UseGuards(JwtGuard)
@@ -76,7 +80,10 @@ export class NotificationController {
 
   @UseGuards(JwtGuard)
   @Patch(':id/read')
-  readNotification(@Param('id') id: number, @User('sub') userId: number) {
+  readNotification(
+    @Param('id', ParseIntPipe) id: number,
+    @User('sub') userId: number,
+  ) {
     return this.notificationService.readNotification(id, userId);
   }
 
@@ -117,7 +124,10 @@ export class NotificationController {
 
   @UseGuards(JwtGuard)
   @Delete(':id')
-  deleteNotification(@Param('id') id: number, @User('sub') userId: number) {
+  deleteNotification(
+    @Param('id', ParseIntPipe) id: number,
+    @User('sub') userId: number,
+  ) {
     return this.notificationService.deleteNotification(id, userId);
   }
 

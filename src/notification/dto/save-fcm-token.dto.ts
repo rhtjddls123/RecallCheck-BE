@@ -1,4 +1,4 @@
-import { IsOptional, IsString } from 'class-validator';
+import { IsIn, IsOptional, IsString } from 'class-validator';
 
 export class SaveFcmTokenDto {
   @IsString()
@@ -6,5 +6,6 @@ export class SaveFcmTokenDto {
 
   @IsString()
   @IsOptional()
+  @IsIn(['web', 'app'])
   platform: 'web' | 'app' = 'web';
 }

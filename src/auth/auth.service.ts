@@ -9,6 +9,7 @@ import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import axios from 'axios';
+import * as bcrypt from 'bcrypt';
 import { UserModel } from './entity/user.entity';
 import { RolesEnum } from './const/roles.const';
 
@@ -88,11 +89,15 @@ export class AuthService {
 
     const { accessToken, refreshToken } = this.loginUser(user);
 
+    const hashedRefreshToken = await bcrypt.hash(refreshToken, 10);
+
     if (type === 'web') {
-      await this.userRepository.update(user.id, { refreshToken });
+      await this.userRepository.update(user.id, {
+        refreshToken: hashedRefreshToken,
+      });
     } else if (type === 'app') {
       await this.userRepository.update(user.id, {
-        appRefreshToken: refreshToken,
+        appRefreshToken: hashedRefreshToken,
       });
     }
 
@@ -113,25 +118,28 @@ export class AuthService {
     }
 
     const user = await this.userRepository.findOne({
-      where: {
-        id: payload.sub,
-        ...(type === 'web'
-          ? { refreshToken }
-          : { appRefreshToken: refreshToken }),
-      },
+      where: { id: payload.sub },
     });
 
     if (!user) {
       throw new UnauthorizedException('유효하지 않은 리프레시 토큰입니다');
     }
 
+    const storedToken =
+      type === 'web' ? user.refreshToken : user.appRefreshToken;
+
+    if (!storedToken || !(await bcrypt.compare(refreshToken, storedToken))) {
+      throw new UnauthorizedException('유효하지 않은 리프레시 토큰입니다');
+    }
+
     const newAccessToken = this.signToken(user, false);
     const newRefreshToken = this.signToken(user, true);
+    const hashedNewRefreshToken = await bcrypt.hash(newRefreshToken, 10);
 
     await this.userRepository.update(user.id, {
       ...(type === 'web'
-        ? { refreshToken: newRefreshToken }
-        : { appRefreshToken: newRefreshToken }),
+        ? { refreshToken: hashedNewRefreshToken }
+        : { appRefreshToken: hashedNewRefreshToken }),
     });
 
     return { accessToken: newAccessToken, refreshToken: newRefreshToken };
@@ -150,18 +158,22 @@ export class AuthService {
       throw new NotFoundException('유저가 존재하지 않습니다');
     }
 
-    await axios.post(
-      'https://kapi.kakao.com/v1/user/unlink',
-      { target_id_type: 'user_id', target_id: user.kakaoId },
-      {
-        headers: {
-          Authorization: `KakaoAK ${process.env.KAKAO_ADMIN_KEY}`,
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-      },
-    );
-
     await this.userRepository.delete(userId);
+
+    try {
+      await axios.post(
+        'https://kapi.kakao.com/v1/user/unlink',
+        { target_id_type: 'user_id', target_id: user.kakaoId },
+        {
+          headers: {
+            Authorization: `KakaoAK ${process.env.KAKAO_ADMIN_KEY}`,
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+        },
+      );
+    } catch (e) {
+      console.error(`Kakao unlink 실패 (kakaoId: ${user.kakaoId})`, e);
+    }
   }
 
   signToken(
