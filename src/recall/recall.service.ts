@@ -28,7 +28,8 @@ interface RecallEsDocument {
   productNm: string;
   makr: string | null;
   bsnmNm: string | null;
-  embedding: number[];
+  embedding: number[] | null;
+  embeddingMakr: number[] | null;
 }
 
 @Injectable()
@@ -219,40 +220,153 @@ export class RecallService {
     };
   }
 
-  // ES 임베딩 검색
+  // Score 분포 분석 (min_score 임계값 결정용, 관리자 전용)
+  async analyzeScoreDistribution(queries: string[]) {
+    type HitItem = {
+      rank: number;
+      productNm: string | undefined;
+      cntntsId: string | undefined;
+      makr: string | undefined | null;
+      score: number;
+      source: 'productNm' | 'makr' | 'both';
+    };
+    type ScoreAnalysisResult = {
+      query: string;
+      merged: HitItem[];
+      byProductNm: Omit<HitItem, 'source'>[];
+      byMakr: Omit<HitItem, 'source'>[];
+    };
+
+    const knnSearch = (embedding: number[], field: string) =>
+      this.esService.search<RecallEsDocument>({
+        index: 'recall',
+        size: 20,
+        knn: {
+          field,
+          query_vector: embedding,
+          k: 20,
+          num_candidates: 100,
+        },
+      });
+
+    const results: ScoreAnalysisResult[] = [];
+
+    for (const query of queries) {
+      const embedding = await this.openAIService.getEmbedding(query);
+
+      const [resProductNm, resMakr] = await Promise.all([
+        knnSearch(embedding, 'embedding'),
+        knnSearch(embedding, 'embeddingMakr'),
+      ]);
+
+      // 병합 (dedup + 높은 점수 채택)
+      const scoreMap = new Map<
+        string,
+        {
+          score: number;
+          source: 'productNm' | 'makr' | 'both';
+          hit: (typeof resProductNm.hits.hits)[0];
+        }
+      >();
+      for (const hit of resProductNm.hits.hits) {
+        const sn = hit._source?.recallSn as string;
+        scoreMap.set(sn, { score: hit._score ?? 0, source: 'productNm', hit });
+      }
+      for (const hit of resMakr.hits.hits) {
+        const sn = hit._source?.recallSn as string;
+        const score = hit._score ?? 0;
+        if (!scoreMap.has(sn)) {
+          scoreMap.set(sn, { score, source: 'makr', hit });
+        } else if (score > scoreMap.get(sn)!.score) {
+          scoreMap.set(sn, { score, source: 'makr', hit });
+        } else {
+          scoreMap.get(sn)!.source = 'both';
+        }
+      }
+
+      const merged = [...scoreMap.values()]
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 20)
+        .map((v, i) => ({
+          rank: i + 1,
+          productNm: v.hit._source?.productNm,
+          cntntsId: v.hit._source?.cntntsId,
+          makr: v.hit._source?.makr || v.hit._source?.bsnmNm,
+          score: parseFloat(v.score.toFixed(4)),
+          source: v.source,
+        }));
+
+      const toHitList = (hits: typeof resProductNm.hits.hits) =>
+        hits.map((h, i) => ({
+          rank: i + 1,
+          productNm: h._source?.productNm,
+          cntntsId: h._source?.cntntsId,
+          makr: h._source?.makr || h._source?.bsnmNm,
+          score: parseFloat(h._score?.toFixed(4) ?? '0'),
+        }));
+
+      results.push({
+        query,
+        merged,
+        byProductNm: toHitList(resProductNm.hits.hits),
+        byMakr: toHitList(resMakr.hits.hits),
+      });
+    }
+
+    return results;
+  }
+
+  // ES 임베딩 검색 (productNm + makr 각각 검색 후 병합)
   async embeddingSearch(query: string) {
     const embedding = await this.openAIService.getEmbedding(query);
 
-    const result = await this.esService.search<RecallEsDocument>({
-      index: 'recall',
-      size: 5,
-      min_score: 0.75,
-      knn: {
-        field: 'embedding',
-        query_vector: embedding,
-        k: 5,
-        num_candidates: 100,
-      },
+    const knnQuery = (field: string) =>
+      this.esService.search<RecallEsDocument>({
+        index: 'recall',
+        size: 10,
+        min_score: 0.75,
+        knn: {
+          field,
+          query_vector: embedding,
+          k: 10,
+          num_candidates: 100,
+        },
+      });
+
+    const [resultProductNm, resultMakr] = await Promise.all([
+      knnQuery('embedding'),
+      knnQuery('embeddingMakr'),
+    ]);
+
+    // recallSn 기준 dedup, 높은 점수 채택
+    const scoreMap = new Map<string, number>();
+    for (const hit of [...resultProductNm.hits.hits, ...resultMakr.hits.hits]) {
+      const sn = hit._source?.recallSn as string;
+      const score = hit._score ?? 0;
+      if (!scoreMap.has(sn) || scoreMap.get(sn)! < score) {
+        scoreMap.set(sn, score);
+      }
+    }
+
+    if (scoreMap.size === 0) return null;
+
+    const top5 = [...scoreMap.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([sn]) => sn);
+
+    console.log(`\n[임베딩 검색] query: "${query}"`);
+    top5.forEach((sn, i) => {
+      console.log(`[${i + 1}] ${sn} | score: ${scoreMap.get(sn)?.toFixed(3)}`);
     });
 
-    const hits = result.hits.hits;
-    if (!hits.length) return null;
-
-    console.log(`\n[임베딩 검색] query: "${query}" | categoryId: '전체'`);
-    hits.forEach((h, i) => {
-      console.log(
-        `[${i + 1}] ${h._source?.productNm} | score: ${h._score?.toFixed(3)}`,
-      );
-    });
-
-    const recallSns = hits.map((h) => h._source?.recallSn as string);
     const data = await this.recallRepository.find({
-      where: { recallSn: In(recallSns) },
+      where: { recallSn: In(top5) },
     });
 
     if (data.length === 0) return { found: false, data: [] };
 
-    const sorted = recallSns
+    const sorted = top5
       .map((sn) => data.find((p) => p.recallSn === sn))
       .filter((p): p is RecallModel => p !== undefined);
 
@@ -283,6 +397,7 @@ export class RecallService {
           recallPublictBgnde: product.recallPublictBgnde ?? null,
           recallPublictEndde: product.recallPublictEndde ?? null,
           embedding: product.embedding,
+          embeddingMakr: product.embeddingMakr,
         },
       ]);
 
@@ -384,6 +499,12 @@ export class RecallService {
             index: true,
             similarity: 'cosine',
           },
+          embeddingMakr: {
+            type: 'dense_vector',
+            dims: 1536,
+            index: true,
+            similarity: 'cosine',
+          },
         },
       },
     });
@@ -409,12 +530,18 @@ export class RecallService {
 
       while (!success && retries < 3) {
         try {
-          const text = [product.productNm, product.makr, product.bsnmNm]
-            .filter(Boolean)
-            .join(' ');
+          const manufacturer = product.makr || product.bsnmNm;
+          const [embedding, embeddingMakr] = await Promise.all([
+            this.openAIService.getEmbedding(product.productNm),
+            manufacturer
+              ? this.openAIService.getEmbedding(manufacturer)
+              : Promise.resolve(null),
+          ]);
 
-          const embedding = await this.openAIService.getEmbedding(text);
-          await this.recallRepository.update(product.recallSn, { embedding });
+          await this.recallRepository.update(product.recallSn, {
+            embedding,
+            embeddingMakr,
+          });
           success = true;
 
           const done = idx + 1;
@@ -474,6 +601,7 @@ export class RecallService {
           makr: product.makr,
           bsnmNm: product.bsnmNm,
           embedding: product.embedding,
+          embeddingMakr: product.embeddingMakr,
         },
       });
 

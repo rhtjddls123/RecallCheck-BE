@@ -1,4 +1,5 @@
 import {
+  Body,
   ClassSerializerInterceptor,
   Controller,
   DefaultValuePipe,
@@ -110,6 +111,13 @@ export class RecallController {
   @Post('embed-all') // 최초 1회만 실행(db에 임베딩값 저장)
   async embedAll() {
     return this.recallService.embedAllProducts();
+  }
+
+  @Roles(RolesEnum.ADMIN)
+  @UseGuards(JwtGuard, RolesGuard)
+  @Post('analyze-scores') // min_score 임계값 결정용 score 분포 분석
+  async analyzeScores(@Body('queries') queries: string[]) {
+    return this.recallService.analyzeScoreDistribution(queries);
   }
 
   @Get(':recallSn')
